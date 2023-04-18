@@ -8,13 +8,7 @@ import sys
 from pathlib import Path
 
 import setuptools
-import torch
-from torch.utils.cpp_extension import (
-    CUDA_HOME,
-    BuildExtension,
-    CppExtension,
-    CUDAExtension,
-)
+from setuptools.command.build_ext import build_ext
 
 
 def read(*names, **kwargs):
@@ -40,19 +34,14 @@ try:
 except Exception:
     pass
 
-if os.getenv("BUILD_VERSION") is not None:
-    version = os.getenv("BUILD_VERSION")
-elif sha != "Unknown":
-    version = version + "+" + sha[:7]
-
 print("Building wheel {}-{}".format(package_name, version))
 
 
 def write_version_file():
     version_path = os.path.join(cwd, "foldedtensor", "version.py")
     with open(version_path, "w") as f:
-        f.write("__version__ = '{}'\n".format(version))
-        f.write("git_version = {}\n".format(repr(sha)))
+        f.write('__version__ = "{}"\n'.format(version))
+        f.write('git_version = "{}"\n'.format(sha))
 
 
 write_version_file()
@@ -66,12 +55,17 @@ if os.getenv("PYTORCH_VERSION"):
 else:
     pytorch_dep += ">=1.7.0"
 
-requirements = [
-    pytorch_dep,
-]
+requirements = [pytorch_dep]
 
 
 def get_extensions():
+    import torch
+    from torch.utils.cpp_extension import (
+        CUDA_HOME,
+        CppExtension,
+        CUDAExtension,
+    )
+
     extension = CppExtension
 
     define_macros = []
@@ -119,6 +113,27 @@ def get_extensions():
     return ext_modules
 
 
+class lazy_build_ext(build_ext):
+    def run(self):
+        from torch.utils.cpp_extension import (
+            BuildExtension,
+        )
+
+        self.distribution.ext_modules = get_extensions()
+
+        build_ext_instance = BuildExtension(
+            self.distribution,
+            no_python_abi_suffix=True,
+            use_ninja=os.environ.get("USE_NINJA", False),
+        )
+        # For editable installs, we need to pass inplace
+        build_ext_instance.inplace = self.inplace
+
+        build_ext_instance.finalize_options()
+
+        return build_ext_instance.run()
+
+
 class clean(distutils.command.clean.clean):
     def run(self):
         with open(".gitignore", "r") as f:
@@ -151,13 +166,9 @@ setuptools.setup(
     zip_safe=True,
     cmdclass={
         "clean": clean,
-        "build_ext": BuildExtension.with_options(
-            no_python_abi_suffix=True, use_ninja=os.environ.get("USE_NINJA", False)
-        ),
+        "build_ext": lazy_build_ext,
     },
     install_requires=requirements,
-    ext_modules=get_extensions(),
-    package_data={
-        "": ["*.dylib", "*.so"],
-    },
+    ext_modules=[setuptools.Extension("foldedtensor._C", [])],
+    package_data={"": ["*.cpp", ".so", ".dylib", ".dll"]},
 )

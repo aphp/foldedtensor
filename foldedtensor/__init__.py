@@ -4,7 +4,11 @@ import torch
 from torch.autograd import Function
 
 from . import _C
-from .version import __version__  # noqa: F401
+
+try:
+    from .version import __version__  # noqa: F401
+except ImportError:
+    __version__ = None
 
 
 # noinspection PyMethodOverriding

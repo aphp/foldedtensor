@@ -15,6 +15,7 @@ __pycache__/
 #*.cpp
 
 # Distribution / packaging
+foldedtensor/version.py
 cmake-build-debug
 poetry.lock
 init
