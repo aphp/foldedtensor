@@ -12,6 +12,7 @@ def test_as_folded_tensor_from_nested_list():
         ],
         data_dims=("samples", "lines", "words"),
         full_names=("samples", "lines", "words"),
+        dtype=torch.long,
     )
     assert ft.data.shape == (2, 5, 2)
     assert ft.lengths == [[2], [5, 1], [1, 0, 0, 0, 2, 2]]
@@ -108,6 +109,7 @@ def ft():
         ],
         data_dims=("samples", "lines", "words"),
         full_names=("samples", "lines", "words"),
+        dtype=torch.long,
     )
 
 

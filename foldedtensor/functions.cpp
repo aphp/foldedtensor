@@ -2,89 +2,74 @@
 #pragma ide diagnostic ignored "cppcoreguidelines-narrowing-conversions"
 
 #include <Python.h>
+#include <numpy/ndarraytypes.h>
+#include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
-#include <torch/csrc/tensor/python_tensor.h>
-#include <torch/csrc/utils/python_scalars.h>
-#include <torch/script.h>
+#include <pybind11/pytypes.h>
+#include <pybind11/stl.h>
 #include <vector>
 
-#include <pybind11/pytypes.h>
-
-#include <torch/csrc/Dtype.h>
-#include <torch/csrc/Exceptions.h>
-#include <torch/csrc/autograd/python_variable.h>
-#include <torch/csrc/utils/python_numbers.h>
-#include <torch/csrc/utils/python_strings.h>
-// #include <torch/csrc/utils/python_symnode.h>
-
-// #include <ATen/PythonTorchFunctionTLS.h>
-#include <c10/util/Exception.h>
-#include <c10/util/irange.h>
-
-// #include <c10/core/SymNodeImpl.h>
-
 namespace py = pybind11;
-using namespace torch::indexing;
 
+std::tuple<py::array, py::array, std::vector<int64_t>, py::array> make_refolding_indexers(
+        // const py::array &data,
+        std::vector<std::vector<int64_t>> &lengths,
+        std::vector<int> &old_shape,
+        std::vector<int> &old_data_dims,
+        std::vector<int> &new_data_dims) {
+    // torch::NoGradGuard no_grad;
 
-std::tuple<torch::Tensor, at::optional<torch::Tensor>> refold(
-        const torch::Tensor &data,
-        std::vector<std::vector<int>> lengths,
-        std::vector<int> old_data_dims,
-        std::vector<int> new_data_dims,
-        bool return_mask) {
-    unsigned int n_lengths = lengths.size();
-    unsigned int n_old_dims = old_data_dims.size();
-    unsigned int n_new_dims = new_data_dims.size();
+    const size_t n_lengths = lengths.size();
+    const size_t n_old_dims = old_data_dims.size();
+    const size_t n_new_dims = new_data_dims.size();
 
-    std::vector<int> old_dim_map(n_lengths, -1);
-    std::vector<int> new_dim_map(n_lengths, -1);
+    std::vector<int8_t> old_dim_map(n_lengths, -1);
+    for (size_t i = 0; i < n_old_dims; i++) {
+        old_dim_map[old_data_dims[i]] = i;
+    }
 
+    std::vector<int8_t> new_dim_map(n_lengths, -1);
+    for (size_t i = 0; i < n_new_dims; i++) {
+        new_dim_map[new_data_dims[i]] = i;
+    }
+
+    std::vector<size_t> offsets(n_lengths - 1, 0);
     std::vector<int64_t> old_idx(n_old_dims, 0);
     std::vector<int64_t> new_idx(n_new_dims, 0);
-
     std::vector<std::tuple<
             std::vector<int64_t>,
             std::vector<int64_t>,
             int64_t>>
             operations;
     operations.reserve(lengths.back().size());
-
-    std::vector<int64_t> shape(n_new_dims + data.dim() - n_old_dims, 0);
-
-    // Copy last dimensions from data shape to new `shape`
-    for (unsigned long i = 0; i < data.dim() - n_old_dims; i++) {
-        shape[n_new_dims + i] = data.size(n_old_dims + i);
+    long long n_elements = 0;
+    std::vector<int64_t> new_shape(n_new_dims + old_shape.size() - n_old_dims, 0);
+    for (size_t i = 0; i < old_shape.size() - n_old_dims; i++) {
+        new_shape[n_new_dims + i] = old_shape[n_old_dims + i];
     }
-
-    for (unsigned long i = 0; i < n_old_dims; i++) {
-        old_dim_map[old_data_dims[i]] = i;
-    }
-
-    for (unsigned long i = 0; i < n_new_dims; i++) {
-        new_dim_map[new_data_dims[i]] = i;
-    }
-
-    std::vector<int> offsets(n_lengths - 1, 0);
     for (int length: lengths.back()) {
         operations.emplace_back(old_idx, new_idx, length);
 
+        n_elements += length;
+
         new_idx.back() += length;
         old_idx.back() += length;
-        shape[n_new_dims - 1] = std::max(shape[n_new_dims - 1], new_idx.back());
+        new_shape[n_new_dims - 1] = std::max(new_shape[n_new_dims - 1], new_idx.back());
 
         int dim = old_dim_map.size() - 2;
-        if (old_dim_map[dim] >= 0) {
-            old_idx[old_dim_map[dim]] += 1;
-            for (unsigned long i = old_dim_map[dim] + 1; i < n_old_dims; i++) {
+        int8_t old_mapped_dim = old_dim_map[dim];
+        if (old_mapped_dim >= 0) {
+            old_idx[old_mapped_dim] += 1;
+            for (size_t i = old_mapped_dim + 1; i < n_old_dims; i++) {
                 old_idx[i] = 0;
             }
         }
 
-        if (new_dim_map[dim] >= 0) {
-            new_idx[new_dim_map[dim]] += 1;
-            shape[new_dim_map[dim]] = std::max(shape[new_dim_map[dim]], new_idx[new_dim_map[dim]]);
-            for (unsigned long i = new_dim_map[dim] + 1; i < n_new_dims; i++) {
+        int8_t new_mapped_dim = new_dim_map[dim];
+        if (new_mapped_dim >= 0) {
+            new_idx[new_mapped_dim] += 1;
+            new_shape[new_mapped_dim] = std::max(new_shape[new_mapped_dim], new_idx[new_mapped_dim]);
+            for (size_t i = new_mapped_dim + 1; i < n_new_dims; i++) {
                 new_idx[i] = 0;
             }
         }
@@ -102,62 +87,53 @@ std::tuple<torch::Tensor, at::optional<torch::Tensor>> refold(
             }
 
             int next_dim = dim - 1;
-            int next_old_data_dim = old_dim_map[next_dim];
-            if (next_old_data_dim >= 0) {
-                old_idx[next_old_data_dim] += 1;
-                for (unsigned long i = next_old_data_dim + 1; i < n_old_dims; i++) {
+            int8_t next_old_data_mapped_dim = old_dim_map[next_dim];
+            if (next_old_data_mapped_dim >= 0) {
+                old_idx[next_old_data_mapped_dim] += 1;
+                for (int8_t i = next_old_data_mapped_dim + 1; i < n_old_dims; i++) {
                     old_idx[i] = 0;
                 }
             }
 
-            int next_new_data_dim = new_dim_map[next_dim];
+            int8_t next_new_data_mapped_dim = new_dim_map[next_dim];
+            if (next_new_data_mapped_dim >= 0) {
+                new_idx[next_new_data_mapped_dim] += 1;
+                new_shape[next_new_data_mapped_dim] = std::max(new_shape[next_new_data_mapped_dim], new_idx[next_new_data_mapped_dim]);
 
-            if (next_new_data_dim >= 0) {
-                new_idx[next_new_data_dim] += 1;
-                shape[next_new_data_dim] = std::max(shape[next_new_data_dim], new_idx[next_new_data_dim]);
-
-                // DEBUG ASSERT NEVER 3
-
-                for (unsigned long i = next_new_data_dim + 1; i < n_new_dims; i++) {
+                for (int8_t i = next_new_data_mapped_dim + 1; i < n_new_dims; i++) {
                     new_idx[i] = 0;
                 }
             }
         }
     }
 
+
     std::vector<int64_t> data_flat_dims = {-1};
-    for (int64_t i = n_old_dims; i < data.dim(); ++i) {
-        data_flat_dims.push_back(data.size(i));
-    }
-    torch::Tensor old_data_flat = data.view(data_flat_dims);
 
-    std::vector<int64_t> new_data_flat_dims = {-1};
-    for (int64_t i = n_new_dims; i < shape.size(); ++i) {
-        new_data_flat_dims.push_back(shape[i]);
-    }
-    torch::Tensor new_data = torch::zeros(shape, data.options());
-    torch::Tensor new_data_flat = new_data.view(new_data_flat_dims);
-
-    at::optional<torch::Tensor> mask_opt;
-
-    if (return_mask) {
-        mask_opt = torch::zeros(
-                {new_data_flat.size(0)},
-                torch::TensorOptions().dtype(torch::kByte));
+    int64_t new_data_num_padded = 1;
+    for (int64_t i = 0; i < n_new_dims; ++i) {
+        new_data_num_padded *= new_shape[i];
     }
 
-    // Init new strides (full of 1, size = n_old_dims) and compute them in reverse for data size and new data sizes
-    // from n_new_dims and n_old_dims offsets
+    auto old_indexer = py::array_t<int64_t>(n_elements);
+    auto new_indexer = py::array_t<int64_t>(n_elements);
+
+    auto mask = py::array_t<uint8_t>(new_data_num_padded);
+    mask[py::make_tuple(py::ellipsis())] = 0;
+
+    // Init new strides (full of 1, size = n_old_dims) and compute them in reverse
+    // for data size and new data sizes from n_new_dims and n_old_dims offsets
     std::vector<long long> old_strides(n_old_dims, 1);
     for (int i = n_old_dims - 2; i >= 0; i--) {
-        old_strides[i] = old_strides[i + 1] * data.size(i + 1);
+        old_strides[i] = old_strides[i + 1] * old_shape[i + 1];
     }
     std::vector<long long> new_strides(n_new_dims, 1);
     for (int i = n_new_dims - 2; i >= 0; i--) {
-        new_strides[i] = new_strides[i + 1] * shape[i + 1];
+        new_strides[i] = new_strides[i + 1] * new_shape[i + 1];
     }
 
-    for (const auto &operation: operations) {
+    size_t offset = 0;
+    for (auto operation : operations) {
         old_idx = std::get<0>(operation);
         new_idx = std::get<1>(operation);
         auto length = std::get<2>(operation);
@@ -175,81 +151,24 @@ std::tuple<torch::Tensor, at::optional<torch::Tensor>> refold(
         }
         begin_new_idx += new_idx.back();
 
-        // print(begin_old_idx, begin_new_idx, length)
-
-        if (return_mask) {
-            auto *mask_data = (uint8_t *) mask_opt.value().data_ptr();
-
-            for ([[maybe_unused]] const auto i: at::irange(length)) {
-                *mask_data = 1;
-                mask_data += 1;
-            }
+        auto *old_indexer_data = (int64_t *) old_indexer.mutable_data() + offset;
+        auto *new_indexer_data = (int64_t *) new_indexer.mutable_data() + offset;
+        auto *mask_data = (uint8_t *) (mask.mutable_data() + begin_new_idx);
+        for (int64_t i = 0; i < length; ++i) {
+            *(mask_data + i) = 1;// TODO ? this only works because uint8_t is 1 byte
+            *(old_indexer_data + i) = begin_old_idx + i;
+            *(new_indexer_data + i) = begin_new_idx + i;
         }
-
-        auto old_slice = old_data_flat.narrow(0, begin_old_idx, length);
-        new_data_flat.narrow(0, begin_new_idx, length).copy_(old_slice);
+        offset += length;
     }
 
-    new_data = new_data.view(shape);
-    if (return_mask) {
-        mask_opt.value() = (mask_opt.value()
-                                    .to(new_data.device())
-                                    .view(std::vector<int64_t>(shape.begin(), shape.begin() + n_new_dims)));
-    }
-
-    return {new_data, mask_opt};
+    return {
+            old_indexer,
+            new_indexer,
+            new_shape,
+            mask.reshape(std::vector<int64_t>(new_shape.begin(), new_shape.begin() + n_new_dims))};
 }
 
-
-at::ScalarType infer_scalar_type(PyObject *obj) {
-    /*if (torch::is_symint(obj)) {
-        return at::ScalarType::Long;
-    }
-    if (torch::is_symfloat(obj)) {
-        return at::ScalarType::Double;
-    }*/
-#ifdef USE_NUMPY
-    if (is_numpy_available()) {
-        if (PyArray_Check(obj)) {
-            return numpy_dtype_to_aten(PyArray_TYPE((PyArrayObject *) obj));
-        }
-        if (PyArray_CheckScalar(obj)) {
-            THPObjectPtr arr(PyArray_FromScalar(obj, nullptr));
-            return numpy_dtype_to_aten(PyArray_TYPE((PyArrayObject *) arr.get()));
-        }
-    }
-#endif
-    if (PyFloat_Check(obj)) {
-        // this is always guaranteed to be a floating-point type, and makes it more
-        // convenient to write e.g. torch.tensor(0.) than torch.tensor(0.,
-        // dtype=torch.Tensor.dtype).
-        return torch::tensors::get_default_scalar_type();
-    }
-    if (THPUtils_checkLong(obj)) {
-        return at::ScalarType::Long;
-    }
-    if (PyBool_Check(obj)) {
-        return at::ScalarType::Bool;
-    }
-    if (PyComplex_Check(obj)) {
-        switch (torch::tensors::get_default_scalar_type()) {
-            case at::ScalarType::Float:
-                return at::ScalarType::ComplexFloat;
-            case at::ScalarType::Double:
-                return at::ScalarType::ComplexDouble;
-            default:
-                TORCH_CHECK(false, "invalid default scalar type for complex")
-        }
-    }
-    if (THPVariable_Check(obj)) {
-        const auto &var = THPVariable_Unpack(obj);
-        return var.scalar_type();
-    }
-    if (THPUtils_checkString(obj)) {
-        throw torch::TypeError("new(): invalid data type '%s'", Py_TYPE(obj)->tp_name);
-    }
-    AT_ERROR("Could not infer dtype of ", Py_TYPE(obj)->tp_name);
-}
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "misc-no-recursion"
@@ -319,9 +238,14 @@ void flatten_py_list(
 
 #pragma clang diagnostic pop
 
-std::tuple<torch::Tensor, torch::Tensor, std::vector<std::vector<int64_t>>> nested_py_list_to_padded_tensor(
+std::tuple<py::array, py::array, std::vector<std::vector<int64_t>>> nested_py_list_to_padded_np_array(
+        // nested list:
         const py::list &nested_list,
-        std::vector<int> data_dims) {
+        // data dims:
+        std::vector<int> data_dims,
+        // dtype:
+        py::dtype &dtype) {
+
     std::vector<std::vector<int64_t>> lengths;
     std::vector<std::tuple<std::vector<int64_t>, PyObject *>> operations;
     std::vector<int64_t> current_indices(1, 0);
@@ -344,58 +268,44 @@ std::tuple<torch::Tensor, torch::Tensor, std::vector<std::vector<int64_t>>> nest
             shape,
             0);
 
-    at::optional<at::ScalarType> scalar_type;
-    for (const auto &op: operations) {
-        auto items = std::get<1>(op);
-        for (const auto i: at::irange(PySequence_Fast_GET_SIZE(items))) {
-            at::ScalarType item_scalar_type = infer_scalar_type(PySequence_Fast_GET_ITEM(items, i));
-            scalar_type = (scalar_type ? at::promoteTypes(*scalar_type, item_scalar_type)
-                                       : item_scalar_type);
+    // dtype_inference_break:
 
-            // Completely break the scalar_type inference loop using goto
-            if (scalar_type == at::ScalarType::ComplexDouble) {
-                goto scalar_type_inference_break;
-            }
-        }
-    }
+    py::array padded_array = py::array(py::dtype(dtype), shape);
+    padded_array[py::make_tuple(py::ellipsis())] = 0;
+    py::array padded_mask = py::array(py::dtype::of<uint8_t>(), shape);
+    padded_mask[py::make_tuple(py::ellipsis())] = 0;
 
-scalar_type_inference_break:
-
-    torch::Tensor padded_tensor = torch::zeros(shape, torch::TensorOptions().dtype(
-                                                              scalar_type ? *scalar_type : torch::tensors::get_default_scalar_type()));
-    torch::Tensor padded_mask = torch::zeros(shape, torch::TensorOptions().dtype(torch::kByte));
-
-    at::IntArrayRef strides = padded_tensor.strides();
-    at::ScalarType dtype = padded_tensor.scalar_type();
-    size_t element_tensor_size = padded_tensor.element_size();
+    const py::ssize_t *array_strides = padded_array.strides();
+    const py::ssize_t *mask_strides = padded_mask.strides();
 
     for (const auto &op: operations) {
         auto indices = std::get<0>(op);
         auto flat_list = std::get<1>(op);
 
-        char *tensor_data = (char *) padded_tensor.data_ptr();
-        auto *mask_data = (uint8_t *) padded_mask.data_ptr();
+        char *array_data = (char *) padded_array.mutable_data();
+        auto *mask_data = (uint8_t *) padded_mask.mutable_data();
         for (size_t dim = 0; dim < indices.size(); ++dim) {
-            tensor_data += strides[dim] * element_tensor_size * indices[dim];
-            mask_data += strides[dim] * indices[dim];
+            array_data += array_strides[dim] * indices[dim];
+            mask_data += mask_strides[dim] * indices[dim];
         }
 
         PyObject **items = PySequence_Fast_ITEMS(flat_list);
-        for (const auto i: at::irange(PySequence_Fast_GET_SIZE(flat_list))) {
-            torch::utils::store_scalar(tensor_data, dtype, items[i]);
-            tensor_data += strides[indices.size() - 1] * element_tensor_size;
+        const int items_count = PySequence_Fast_GET_SIZE(flat_list);
+        for (int i = 0; i < items_count; ++i) {
+            PyArray_SETITEM(padded_array.ptr(), array_data, items[i]);
+            array_data += array_strides[indices.size() - 1];
             *mask_data = 1;
-            mask_data += strides[indices.size() - 1];
+            mask_data += mask_strides[indices.size() - 1];
         }
         Py_DECREF(flat_list);
     }
 
-    return std::make_tuple(padded_tensor, padded_mask, lengths);
+    return std::make_tuple(padded_array, padded_mask, lengths);
 }
 
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("refold", &refold, "Refolds the tensor into a different shape");
-    m.def("nested_py_list_to_padded_tensor", &nested_py_list_to_padded_tensor, "Converts a nested Python list to a padded tensor");
+PYBIND11_MODULE(_C, m) {
+    m.def("make_refolding_indexers", &make_refolding_indexers, "Refolds the tensor into a different shape");
+    m.def("nested_py_list_to_padded_array", &nested_py_list_to_padded_np_array, "Converts a nested Python list to a padded array");
 }
 
 #pragma clang diagnostic pop
