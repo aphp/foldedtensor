@@ -1,3 +1,11 @@
+<div align="center">
+<p align="center">
+  <img src="banner.png" width="70%">
+</p>
+</div>
+
+----
+
 # FoldedTensor: PyTorch extension for handling deeply nested sequences of variable length
 
 `foldedtensor` is a PyTorch extension that provides efficient handling of tensors containing deeply nested sequences variable sizes. It enables the flattening/unflattening (or unfolding/folding) of data dimensions based on a inner structure of sequence lengths. This library is particularly useful when working with data that can be split in different ways and enables you to avoid choosing a fixed representation.
@@ -72,7 +80,7 @@ Unlike other ragged or nested tensor implementations, a FoldedTensor does not en
 Here is a comparison with other common implementations for handling nested sequences of variable length:
 
 | Feature                   | NestedTensor | MaskedTensor | FoldedTensor |
-|---------------------------|--------------|--------------|--------------|
+| ------------------------- | ------------ | ------------ | ------------ |
 | Inner data structure      | Flat         | Padded       | Arbitrary    |
 | Max nesting level         | 1            | 1            | ∞            |
 | From nested python lists  | No           | No           | Yes          |
