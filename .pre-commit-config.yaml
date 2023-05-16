@@ -21,7 +21,7 @@ repos:
     rev: 'v0.0.245'
     hooks:
       - id: ruff
-        args: ['--config', 'ruff.toml']
+        args: ['--config', 'pyproject.toml']
   - repo: https://github.com/psf/black
     rev: 22.3.0
     hooks:

@@ -20,11 +20,7 @@ numpy_to_torch_dtype_dict = {
 
 from . import _C
 
-try:
-    from .version import __version__  # noqa: F401
-except ImportError:
-    __version__ = None
-
+__version__ = "0.1.0"
 
 # noinspection PyMethodOverriding
 class Refold(Function):

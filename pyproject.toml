@@ -1,0 +1,102 @@
+[project]
+name = "foldedtensor"
+description = "PyTorch extension for handling deeply nested sequences of variable length"
+authors = [
+    { name = "Perceval Wajsburt", email = "perceval.wajsburt-ext@aphp.fr" },
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+urls.homepage = "https://github.com/aphp/foldedtensor/"
+urls.repository = "https://github.com/aphp/foldedtensor/"
+dynamic = ["version"]
+requires-python = ">3.7.6,<4.0"
+
+dependencies = [
+    "torch>1.0.0",
+    "numpy",
+]
+
+[project.optional-dependencies]
+dev = [
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "foldedtensor.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.interrogate]
+ignore-init-method = true
+ignore-init-module = true
+ignore-magic = false
+ignore-semiprivate = false
+ignore-private = false
+ignore-property-decorators = false
+ignore-module = true
+ignore-nested-functions = false
+ignore-nested-classes = true
+ignore-setters = false
+fail-under = 10
+exclude = ["docs", "build", "tests"]
+verbose = 0
+quiet = false
+whitelist-regex = []
+color = true
+omit-covered-files = false
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+
+
+[build-system]
+requires = [
+    "setuptools",
+    "pybind11>=2.10.4",
+    "numpy==1.15.0; python_version<='3.7'",
+    "numpy==1.17.3; python_version=='3.8'",
+    "numpy==1.19.3; python_version=='3.9'",
+    "numpy==1.21.3; python_version=='3.10'",
+    "numpy; python_version>='3.11'",
+]
+build-backend = "setuptools.build_meta"
+
+
+[tool.cibuildwheel]
+skip = [
+    "*p36-*", # Skip Python 3.6
+    "pp*", # Skip PyPy
+    "*-win32", # Skip 32-bit Windows
+    "*-manylinux_i686", # Skip 32-bit Linux
+    "*-win_arm64", # Skip experimental Windows on ARM
+    "*-musllinux*", # Skip slow Linux
+    "*-manylinux_aarch64", # Skip slow Linux
+    "*-manylinux_ppc64le", # Skip slow Linux
+    "*-manylinux_s390x", # Skip slow Linux
+]
+
+[tool.ruff]
+fix = true
+exclude = [
+    ".git",
+    "__pycache__",
+    "__init__.py",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".venv",
+    "build",
+]
+ignore = []
+line-length = 88
+select = [
+    "E",
+    "F",
+    "W",
+    "I001"
+]
+fixable = ["E", "F", "W", "I"]
+
+[isort]
+known-first-party = ["foldedtensor"]

@@ -35,6 +35,7 @@ ft = as_folded_tensor(
     ],
     data_dims=("samples", "words"),
     full_names=("samples", "lines", "words"),
+    dtype=torch.long,
 )
 print(ft)
 # FoldedTensor([[1, 2, 3],
