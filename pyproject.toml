@@ -2,7 +2,7 @@
 name = "foldedtensor"
 description = "PyTorch extension for handling deeply nested sequences of variable length"
 authors = [
-    { name = "Perceval Wajsburt", email = "perceval.wajsburt-ext@aphp.fr" },
+    { name = "Perceval Wajsbürt", email = "perceval.wajsburt-ext@aphp.fr" },
 ]
 license = { file = "LICENSE" }
 readme = "README.md"
