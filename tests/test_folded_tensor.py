@@ -27,6 +27,16 @@ def test_as_folded_tensor_from_nested_list():
             ]
         )
     ).all()
+    assert (
+        ft.mask
+        == torch.tensor(
+            [
+                [[1, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
+                [[1, 1], [0, 0], [0, 0], [0, 0], [0, 0]],
+            ]
+        ).bool()
+    ).all()
+    assert ft.mask.dtype == torch.bool
 
 
 def test_as_folded_tensor_from_tensor():
@@ -68,6 +78,7 @@ def test_as_folded_tensor_error():
                 "lines",
             ),
             full_names=("samples", "lines", "words"),
+            dtype=torch.long,
         )
 
     assert "The last dimension" in str(excinfo.value)
@@ -84,7 +95,7 @@ def test_as_folded_tensor_error():
             full_names=("samples", "lines", "words"),
         )
 
-    assert "as_folded_tensor expects either:" in str(excinfo.value)
+    assert "as_folded_tensor expects:" in str(excinfo.value)
 
     with pytest.raises(ValueError) as excinfo:
         as_folded_tensor(
@@ -97,7 +108,7 @@ def test_as_folded_tensor_error():
             lengths=[[1, 2, 3]],
         )
 
-    assert "as_folded_tensor expects either:" in str(excinfo.value)
+    assert "dtype must be provided" in str(excinfo.value)
 
 
 @pytest.fixture
@@ -128,6 +139,16 @@ def test_refold_samples(ft):
             ]
         )
     ).all()
+    assert (
+        ft2.mask
+        == torch.tensor(
+            [
+                [1, 1, 1],
+                [1, 1, 0],
+            ]
+        ).bool()
+    ).all()
+    assert ft2.mask.dtype == torch.bool
 
 
 def test_refold_tuple_param(ft):
@@ -196,3 +217,25 @@ def test_embedding_backward(ft):
             ]
         )
     ).all()
+
+
+def test_to(ft):
+    # this test doesn't do much since we don't have access to non-cpu devices in the CI
+    assert ft.to("cpu").indexer.device == torch.device("cpu")
+
+
+def test_with_data(ft):
+    new_ft = ft.with_data(ft.as_tensor() + 1)
+    assert (
+        new_ft.refold("samples", "words") == torch.tensor([[2, 3, 4], [5, 4, 0]])
+    ).all()
+
+
+def test_list_args(ft):
+    embedder = torch.nn.Embedding(10, 16)
+    embedding = embedder(ft.refold("words"))
+    cat_ft = torch.cat([embedding, embedding], dim=-1)
+    assert isinstance(cat_ft, FoldedTensor)
+    assert cat_ft.data.shape == (5, 32)
+    refolded = cat_ft.refold("samples", "words")
+    assert refolded.data.shape == (2, 3, 32)

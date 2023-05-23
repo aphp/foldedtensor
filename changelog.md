@@ -1,3 +1,7 @@
+# v0.2.1
+
+- Improve performance by computing the new "padded to flattened" indexer only (and not the previous one) when refolding
+
 # v0.2.0
 
 - Remove C++ torch dependency in favor of Numpy due to lack of torch ABI backward/forward compatibility, making the pre-built wheels unusable in most cases
