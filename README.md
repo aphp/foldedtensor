@@ -1,6 +1,6 @@
 <div align="center">
 <p align="center">
-  <img src="banner.png" width="70%">
+  <img src="https://github.com/aphp/foldedtensor/raw/main/banner.png" width="70%">
 </p>
 </div>
 

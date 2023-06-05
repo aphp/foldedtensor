@@ -1,3 +1,8 @@
+# v0.2.2
+
+- Github release :octocat:
+- Fix backpropagation when refolding
+
 # v0.2.1
 
 - Improve performance by computing the new "padded to flattened" indexer only (and not the previous one) when refolding
