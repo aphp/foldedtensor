@@ -35,7 +35,7 @@ class Refold(Function):
         ctx.lengths = self.lengths
         ctx.old_data_dims = self.data_dims
         ctx.new_data_dims = dims
-        ctx.indexer = self.indexer
+        ctx.input_indexer = self.indexer
 
         device = self.data.device
 
@@ -45,6 +45,7 @@ class Refold(Function):
         )
         data = self.as_tensor()
         indexer = torch.from_numpy(np_new_indexer).to(device)
+        ctx.output_indexer = indexer
         shape_suffix = data.shape[len(self.data_dims) :]
         refolded_data = torch.zeros(
             (*shape_prefix, *shape_suffix), dtype=data.dtype, device=device
@@ -69,16 +70,14 @@ class Refold(Function):
             ctx.lengths,
             ctx.old_data_dims,
         )
-        indexer = torch.from_numpy(np_new_indexer).to(device)
         # new_data_flat.index_put_({new_indexer}, old_data_flat.index_select(0, old_indexer));
         shape_suffix = grad_output.shape[len(ctx.new_data_dims) :]
         grad_input = torch.zeros(
             (*shape_prefix, *shape_suffix), dtype=grad_output.dtype, device=device
         )
-        index_select = grad_output.reshape(-1, *shape_suffix).index_select(
-            0, ctx.indexer
-        )
-        grad_input.view(-1, *shape_suffix)[indexer] = index_select
+        grad_input.view(-1, *shape_suffix)[ctx.input_indexer] = grad_output.reshape(
+            -1, *shape_suffix
+        ).index_select(0, ctx.output_indexer)
         return grad_input, None
         # return FoldedTensor(
         #     data=refolded_data,
