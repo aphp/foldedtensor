@@ -113,67 +113,76 @@ make_refolding_indexer(
 size_t flatten_py_list(
         py::list nested_list,
         std::vector<std::vector<int64_t>> &lengths,
-        std::vector<std::tuple<std::vector<int64_t>, PyObject *>> &operations,
+        std::vector<std::tuple<std::vector<int64_t>, int64_t, PyObject *>> &operations,
         std::vector<int64_t> &current_indices,
         std::vector<int64_t> &data_dim_map,
         std::vector<int64_t> &shape,
-        int dim) {
+        int dim,
+        int total) {
     if (nested_list.empty()) {
-        return 0;
+        return total;
     }
 
-    size_t total = 0;
-
-    bool is_data_dim = dim < data_dim_map.size() && data_dim_map[dim] >= 0;
+    bool is_data_dim = dim >= data_dim_map.size() || data_dim_map[dim] >= 0;
+    bool next_is_foldable_dim = dim + 1 < data_dim_map.size();
 
     if (!py::isinstance<py::list>(nested_list[0])) {
-        operations.emplace_back(current_indices, PySequence_Fast(nested_list.ptr(), "Something when wrong when reading one of the inner list"));
+        operations.emplace_back(
+                current_indices,
+                total,
+                PySequence_Fast(nested_list.ptr(), "Something when wrong when reading one of the inner lists"));
+        if (dim + 1 == data_dim_map.size()) {
+            total += nested_list.size();
+        }
         current_indices.back() += nested_list.size();
-        total += nested_list.size();
     } else {
-
-        if (lengths.size() <= dim + 1) {
+        if (next_is_foldable_dim && lengths.size() <= dim + 1) {
             lengths.emplace_back();
         }
 
         for (auto &&i: nested_list) {
 
             auto sublist = i.cast<py::list>();
-            lengths[dim + 1].push_back(sublist.size());
+
+            if (next_is_foldable_dim) {
+                lengths[dim + 1].push_back(sublist.size());
+            }
 
             if (is_data_dim) {
                 current_indices.push_back(0);
             }
 
-            total += flatten_py_list(
+            total = flatten_py_list(
                     sublist,
                     lengths,
                     operations,
                     current_indices,
                     data_dim_map,
                     shape,
-                    dim + 1);
+                    dim + 1,
+                    total);
+
+            if (current_indices.size() > shape.size()) {
+                shape.push_back(0);
+            }
 
             if (is_data_dim) {
 
                 current_indices.pop_back();
                 current_indices.back() += 1;
+            }
+            shape[current_indices.size() - 1] = std::max(shape[current_indices.size() - 1], current_indices.back());
 
-            } else {
-                // current_indices.back() = offset;
-
-                if (current_indices.size() > shape.size()) {
-                    shape.push_back(0);
-                }
-
-                shape[current_indices.size() - 1] = std::max(shape[current_indices.size() - 1], current_indices.back());
+            if (dim + 1 == data_dim_map.size()) {
+                total += 1;
             }
         }
     }
 
-    if (is_data_dim) {
-        shape[data_dim_map[dim]] = std::max(shape[data_dim_map[dim]], current_indices.back());
-    }
+    shape[current_indices.size() - 1] = std::max(shape[current_indices.size() - 1], current_indices.back());
+    /*if (is_data_dim) {
+        // shape[data_dim_map[dim]] = std::max(shape[data_dim_map[dim]], current_indices.back());
+    }*/
     return total;
 }
 
@@ -195,7 +204,7 @@ nested_py_list_to_padded_np_array(
     // Operations to perform to assign the values to the padded array
     // Each operation is a tuple of the indices of the first element to assign
     // and a list of values to assign contiguously from that position
-    std::vector<std::tuple<std::vector<int64_t>, PyObject *>> operations;
+    std::vector<std::tuple<std::vector<int64_t>, int64_t, PyObject *>> operations;
 
     // Index from the data dimension to the dim in the theoretically fully padded list
     std::vector<int64_t> data_dim_map(*std::max_element(data_dims.begin(), data_dims.end()) + 1, -1);
@@ -214,6 +223,7 @@ nested_py_list_to_padded_np_array(
             current_indices,
             data_dim_map,
             shape,
+            0,
             0);
 
     // Create the padded array from the shape inferred during `flatten_py_list`
@@ -224,11 +234,15 @@ nested_py_list_to_padded_np_array(
     const py::ssize_t *array_strides = padded_array.strides();
     const size_t itemsize = padded_array.itemsize();
 
-    size_t offset = 0;
+    size_t element_size = 1;
+    for (int i = data_dims.size(); i < shape.size(); ++i) {
+        element_size *= shape[i];
+    }
     py::array indexer = py::array(py::dtype::of<int64_t>(), num_elements);
     for (const auto &op: operations) {
         auto indices = std::get<0>(op);
-        auto flat_list = std::get<1>(op);
+        auto element_idx = std::get<1>(op);
+        auto flat_list = std::get<2>(op);
 
         // Byte pointers to elements in the array and the mask
         // Since we cannot know the size of elements in the array (as it's handled
@@ -245,9 +259,14 @@ nested_py_list_to_padded_np_array(
             // we can use strides to count the number of elements
             begin_byte += array_strides[dim] * indices[dim];
         }
-        size_t begin_idx = begin_byte / itemsize;
+        size_t begin_idx = begin_byte / (itemsize * element_size);
         auto *array_ptr = (char *) padded_array.mutable_data() + begin_byte;
-        auto indexer_ptr = ((int64_t *) indexer.mutable_data()) + offset;
+        int64_t *indexer_ptr;
+        if (element_size > 1) {
+            *(((int64_t *) indexer.mutable_data()) + element_idx) = begin_idx;
+        } else {
+            indexer_ptr = ((int64_t *) indexer.mutable_data()) + element_idx;
+        }
 
         PyObject **items = PySequence_Fast_ITEMS(flat_list);
         const int length = PySequence_Fast_GET_SIZE(flat_list);
@@ -259,11 +278,13 @@ nested_py_list_to_padded_np_array(
             array_ptr += itemsize;
 
             // Assign the current index to the indexer and move to the next element
-            *indexer_ptr = begin_idx + i;
-            indexer_ptr += 1;
+            if (element_size == 1) {
+                *indexer_ptr = begin_idx + i;
+                indexer_ptr += 1;
+            }
         }
+
         Py_DECREF(flat_list);
-        offset += length;
     }
 
     return {padded_array, indexer, lengths};
