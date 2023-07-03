@@ -39,6 +39,41 @@ def test_as_folded_tensor_from_nested_list():
     assert ft.mask.dtype == torch.bool
 
 
+def test_embedding_from_nested_list():
+    ft = as_folded_tensor(
+        [
+            [[[1, 1, 1]], [], [], [], [[2, 2, 2], [3, 3, 3]]],
+            [[[4, 4, 4], [3, 3, 3]]],
+        ],
+        data_dims=("samples", "lines", "words"),
+        full_names=("samples", "lines", "words"),
+        dtype=torch.long,
+    )
+    assert ft.data.shape == (2, 5, 2, 3)
+    assert ft.lengths == [[2], [5, 1], [1, 0, 0, 0, 2, 2]]
+    assert ft.data_dims == (0, 1, 2)
+    assert ft.full_names == ("samples", "lines", "words")
+    assert (
+        ft.data[..., 0]
+        == torch.tensor(
+            [
+                [[1, 0], [0, 0], [0, 0], [0, 0], [2, 3]],
+                [[4, 3], [0, 0], [0, 0], [0, 0], [0, 0]],
+            ]
+        )
+    ).all()
+    assert (
+        ft.mask
+        == torch.tensor(
+            [
+                [[1, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
+                [[1, 1], [0, 0], [0, 0], [0, 0], [0, 0]],
+            ]
+        ).bool()
+    ).all()
+    assert ft.mask.dtype == torch.bool
+
+
 def test_as_folded_tensor_from_tensor():
     ft = as_folded_tensor(
         torch.tensor(
