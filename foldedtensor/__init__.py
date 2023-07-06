@@ -123,7 +123,17 @@ def as_folded_tensor(
         raise ValueError(
             "The last dimension of `data_dims` must be the last variable dimension."
         )
-    if isinstance(data, Sequence):
+    elif isinstance(data, torch.Tensor) and lengths is not None:
+        np_indexer, shape = _C.make_refolding_indexer(lengths, data_dims)
+        assert shape == list(data.shape[: len(data_dims)])
+        result = FoldedTensor(
+            data=data,
+            lengths=lengths,
+            data_dims=data_dims,
+            full_names=full_names,
+            indexer=torch.from_numpy(np_indexer).to(data.device),
+        )
+    elif isinstance(data, Sequence):
         if dtype is None:
             raise ValueError("dtype must be provided when `data` is a sequence")
         dtype = numpy_to_torch_dtype_dict.get(dtype, dtype)
@@ -140,16 +150,6 @@ def as_folded_tensor(
             data_dims=data_dims,
             full_names=full_names,
             indexer=indexer,
-        )
-    elif isinstance(data, torch.Tensor) and lengths is not None:
-        np_indexer, shape = _C.make_refolding_indexer(lengths, data_dims)
-        assert shape == list(data.shape[: len(data_dims)])
-        result = FoldedTensor(
-            data=data,
-            lengths=lengths,
-            data_dims=data_dims,
-            full_names=full_names,
-            indexer=torch.from_numpy(np_indexer).to(data.device),
         )
     else:
         raise ValueError(
@@ -259,14 +259,18 @@ class FoldedTensor(torch.Tensor):
                     ft is None or ft.data_dims == arg.data_dims
                 ), "Cannot perform operation on FoldedTensors with different structure"
                 ft = arg
-            if isinstance(arg, list):
+            if isinstance(arg, (list, tuple)):
                 for item in arg:
-                    assert (
-                        ft is None or ft.data_dims == item.data_dims
-                    ), "Cannot perform operation on FoldedTensors with different structure"
-                    ft = item
+                    if isinstance(item, FoldedTensor):
+                        assert (
+                            ft is None or ft.data_dims == item.data_dims
+                        ), "Cannot perform operation on FoldedTensors with different structure"
+                        ft = item
 
-        if ft.shape[: len(ft.data_dims)] != result.shape[: len(ft.data_dims)]:
+        if (
+            ft is not None
+            and ft.shape[: len(ft.data_dims)] != result.shape[: len(ft.data_dims)]
+        ):
             return result.as_subclass(torch.Tensor)
 
         result = FoldedTensor(
