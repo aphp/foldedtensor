@@ -1,4 +1,4 @@
-# Unreleased
+# v0.3.0
 
 - Allow dims after last foldable dim during list conversion (e.g. embeddings)
 
