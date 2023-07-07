@@ -274,3 +274,38 @@ def test_list_args(ft):
     assert cat_ft.data.shape == (5, 32)
     refolded = cat_ft.refold("samples", "words")
     assert refolded.data.shape == (2, 3, 32)
+
+
+def test_too_deep():
+    with pytest.raises(ValueError) as excinfo:
+        as_folded_tensor(
+            [
+                [0, 1, 2],
+                [3, 4],
+            ],
+            full_names=("sample", "line", "token"),
+            data_dims=("sample", "line", "token"),
+            dtype=torch.long,
+        )
+    assert "nesting" in str(excinfo.value)
+
+
+def test_pad_embedding():
+    ft = as_folded_tensor(
+        [
+            [0, 1, 2],
+            [3, 4],
+        ],
+        full_names=("token",),
+        data_dims=("token",),
+        dtype=torch.long,
+    )
+    assert (
+        ft.data
+        == torch.tensor(
+            [
+                [0, 1, 2],
+                [3, 4, 0],
+            ]
+        )
+    ).all()

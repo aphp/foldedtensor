@@ -127,6 +127,12 @@ size_t flatten_py_list(
     bool next_is_foldable_dim = dim + 1 < data_dim_map.size();
 
     if (!py::isinstance<py::list>(nested_list[0])) {
+        if (dim < data_dim_map.size() - 1) {
+            throw py::value_error(
+                    "The provided data_dims have too many entries compared "
+                    "to the nesting of the input."
+            );
+        }
         operations.emplace_back(
                 current_indices,
                 total,
@@ -166,12 +172,13 @@ size_t flatten_py_list(
                 shape.push_back(0);
             }
 
+            shape[current_indices.size() - 1] = std::max(shape[current_indices.size() - 1], current_indices.back());
+
             if (is_data_dim) {
 
                 current_indices.pop_back();
                 current_indices.back() += 1;
             }
-            shape[current_indices.size() - 1] = std::max(shape[current_indices.size() - 1], current_indices.back());
 
             if (dim + 1 == data_dim_map.size()) {
                 total += 1;
@@ -180,9 +187,7 @@ size_t flatten_py_list(
     }
 
     shape[current_indices.size() - 1] = std::max(shape[current_indices.size() - 1], current_indices.back());
-    /*if (is_data_dim) {
-        // shape[data_dim_map[dim]] = std::max(shape[data_dim_map[dim]], current_indices.back());
-    }*/
+
     return total;
 }
 
