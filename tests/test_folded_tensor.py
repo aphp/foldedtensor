@@ -13,6 +13,7 @@ def test_as_folded_tensor_from_nested_list():
         data_dims=("samples", "lines", "words"),
         full_names=("samples", "lines", "words"),
         dtype=torch.long,
+        device=torch.device("cpu"),
     )
     assert ft.data.shape == (2, 5, 2)
     assert ft.lengths == [[2], [5, 1], [1, 0, 0, 0, 2, 2]]
@@ -309,3 +310,25 @@ def test_pad_embedding():
             ]
         )
     ).all()
+
+
+def test_as_tensor(ft):
+    tensor = ft.as_tensor()
+    assert type(tensor) == torch.Tensor
+    assert tensor.shape == (2, 5, 2)
+    assert tensor.storage().data_ptr() == ft.storage().data_ptr()
+
+
+def test_clone(ft):
+    assert isinstance(ft.mask, torch.Tensor)
+    cloned = ft.clone()
+    assert cloned.storage().data_ptr() != ft.storage().data_ptr()
+    assert cloned.indexer.storage().data_ptr() != ft.indexer.storage().data_ptr()
+
+
+def test_share_memory(ft):
+    assert isinstance(ft.mask, torch.Tensor)
+    cloned = ft.share_memory_()
+    assert cloned.is_shared()
+    assert cloned.indexer.is_shared()
+    assert cloned.mask.is_shared()

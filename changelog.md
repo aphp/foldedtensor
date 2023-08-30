@@ -1,3 +1,7 @@
+# Unreleased
+
+- Enable sharing FoldedTensor instances in a multiprocessing + cuda context by autocloning the indexer before fork-pickling an instance
+
 # v0.3.0
 
 - Allow dims after last foldable dim during list conversion (e.g. embeddings)
