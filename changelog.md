@@ -1,4 +1,4 @@
-# Unreleased
+# v0.3.1
 
 - Enable sharing FoldedTensor instances in a multiprocessing + cuda context by autocloning the indexer before fork-pickling an instance
 
