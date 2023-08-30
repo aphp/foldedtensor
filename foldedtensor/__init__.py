@@ -1,3 +1,4 @@
+from multiprocessing.reduction import ForkingPickler
 from typing import List, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -94,7 +95,7 @@ def as_folded_tensor(
     full_names: Sequence[str],
     dtype: Optional[torch.dtype] = None,
     lengths: Optional[List[List[int]]] = None,
-    device: Optional[torch.device] = None,
+    device: Optional[Union[str, torch.device]] = None,
 ):
     """
     Converts a tensor or nested sequence into a FoldedTensor.
@@ -113,7 +114,7 @@ def as_folded_tensor(
     lengths: Optional[List[List[int]]]
         The lengths of the variable dimensions. If `data` is a tensor, this argument
         must be provided. If `data` is a sequence, this argument must be `None`.
-    device: Optional[torch.device]
+    device: Optional[Unit[str, torch.device]]
         The device of the output tensor
     """
     data_dims = tuple(
@@ -249,6 +250,12 @@ class FoldedTensor(torch.Tensor):
     def __torch_function__(cls, func, types, args=(), kwargs=None):
         result = super().__torch_function__(func, types, args, kwargs)
 
+        if func is torch.Tensor.share_memory_:
+            self = args[0]
+            self.indexer.share_memory_()
+            if self._mask is not None:
+                self._mask.share_memory_()
+
         if not isinstance(result, torch.Tensor):
             return result
 
@@ -283,6 +290,13 @@ class FoldedTensor(torch.Tensor):
         )
         return result
 
+    def clone(self):
+        cloned = super().clone()
+        cloned.indexer = self.indexer.clone()
+        if self._mask is not None:
+            cloned._mask = self._mask.clone()
+        return cloned
+
     def refold(self, *dims: Union[Sequence[Union[int, str]], int, str]):
         if not isinstance(dims[0], (int, str)):
             assert len(dims) == 1, (
@@ -298,3 +312,26 @@ class FoldedTensor(torch.Tensor):
             return self
 
         return Refold.apply(self, dims)
+
+
+def reduce_foldedtensor(self: FoldedTensor):
+    return (
+        FoldedTensor,
+        (
+            self.data.as_tensor(),
+            self.lengths,
+            self.data_dims,
+            self.full_names,
+            self.indexer.clone()
+            if self.indexer.is_shared() and self.indexer.storage().is_cuda
+            else self.indexer,
+            None
+            if self._mask is not None
+            and self._mask.is_shared()
+            and self._mask.storage().is_cuda
+            else self._mask,
+        ),
+    )
+
+
+ForkingPickler.register(FoldedTensor, reduce_foldedtensor)
