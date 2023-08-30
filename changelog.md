@@ -1,6 +1,7 @@
 # v0.3.1
 
 - Enable sharing FoldedTensor instances in a multiprocessing + cuda context by autocloning the indexer before fork-pickling an instance
+- Distribute arm64 wheels for macOS
 
 # v0.3.0
 
