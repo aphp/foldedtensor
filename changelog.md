@@ -1,3 +1,7 @@
+# v0.3.2
+
+- Allow to use `as_folded_tensor` with no args, as a simple padding function
+
 # v0.3.1
 
 - Enable sharing FoldedTensor instances in a multiprocessing + cuda context by autocloning the indexer before fork-pickling an instance

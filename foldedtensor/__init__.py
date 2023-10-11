@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch.autograd import Function
 
-numpy_to_torch_dtype_dict = {
+np_to_torch_dtype = {
     torch.bool: bool,
     torch.uint8: np.uint8,
     torch.int8: np.int8,
@@ -89,10 +89,32 @@ class Refold(Function):
         # )
 
 
+type_to_dtype_dict = {
+    int: torch.int64,
+    float: torch.float64,
+    bool: torch.bool,
+    None: torch.float64,
+}
+
+
+def get_metadata(nested_data):
+    item = None
+
+    def rec(seq):
+        nonlocal item
+        if isinstance(seq, (list, tuple)):
+            for item in seq:
+                yield from (1 + res for res in rec(item))
+        else:
+            yield 0
+
+    return next(rec(nested_data), 0), type(item)
+
+
 def as_folded_tensor(
     data: Sequence,
-    data_dims: Sequence[Union[int, str]],
-    full_names: Sequence[str],
+    data_dims: Optional[Sequence[Union[int, str]]] = None,
+    full_names: Optional[Sequence[str]] = None,
     dtype: Optional[torch.dtype] = None,
     lengths: Optional[List[List[int]]] = None,
     device: Optional[Union[str, torch.device]] = None,
@@ -117,14 +139,18 @@ def as_folded_tensor(
     device: Optional[Unit[str, torch.device]]
         The device of the output tensor
     """
-    data_dims = tuple(
-        dim if isinstance(dim, int) else full_names.index(dim) for dim in data_dims
-    )
-    if (data_dims[-1] + 1) != len(full_names):
-        raise ValueError(
-            "The last dimension of `data_dims` must be the last variable dimension."
+    if data_dims is not None:
+        data_dims = tuple(
+            dim if isinstance(dim, int) else full_names.index(dim) for dim in data_dims
         )
-    elif isinstance(data, torch.Tensor) and lengths is not None:
+        if (data_dims[-1] + 1) != len(full_names):
+            raise ValueError(
+                "The last dimension of `data_dims` must be the last variable dimension."
+            )
+    elif full_names is not None:
+        data_dims = tuple(range(len(full_names)))
+    if isinstance(data, torch.Tensor) and lengths is not None:
+        data_dims = data_dims or tuple(range(len(lengths)))
         np_indexer, shape = _C.make_refolding_indexer(lengths, data_dims)
         assert shape == list(data.shape[: len(data_dims)])
         result = FoldedTensor(
@@ -135,9 +161,15 @@ def as_folded_tensor(
             indexer=torch.from_numpy(np_indexer).to(data.device),
         )
     elif isinstance(data, Sequence):
+        # if dtype is None:
+        #     raise ValueError("dtype must be provided when `data` is a sequence")
+        if data_dims is None or dtype is None:
+            deepness, inferred_dtype = get_metadata(data)
+        if data_dims is None:
+            data_dims = tuple(range(deepness))
         if dtype is None:
-            raise ValueError("dtype must be provided when `data` is a sequence")
-        dtype = numpy_to_torch_dtype_dict.get(dtype, dtype)
+            dtype = type_to_dtype_dict.get(inferred_dtype)
+        dtype = np_to_torch_dtype.get(dtype, dtype)
         padded, indexer, lengths = _C.nested_py_list_to_padded_array(
             data,
             data_dims,
@@ -235,13 +267,17 @@ class FoldedTensor(torch.Tensor):
     def to(self, *args, **kwargs):
         with torch._C.DisableTorchFunction():
             result = super().to(*args, **kwargs)
+            copy = kwargs.get("copy", False)
+            non_blocking = kwargs.get("non_blocking", False)
             return FoldedTensor(
                 data=result,
                 lengths=self.lengths,
                 data_dims=self.data_dims,
                 full_names=self.full_names,
-                indexer=self.indexer.to(result.device, copy=kwargs.get("copy", False)),
-                mask=self._mask.to(result.device, copy=kwargs.get("copy", False))
+                indexer=self.indexer.to(
+                    result.device, copy=copy, non_blocking=non_blocking
+                ),
+                mask=self._mask.to(result.device, copy=copy, non_blocking=non_blocking)
                 if self._mask is not None
                 else None,
             )

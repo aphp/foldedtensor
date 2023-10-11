@@ -133,19 +133,6 @@ def test_as_folded_tensor_error():
 
     assert "as_folded_tensor expects:" in str(excinfo.value)
 
-    with pytest.raises(ValueError) as excinfo:
-        as_folded_tensor(
-            [
-                [[1], [], [], [], [2, 3]],
-                [[4, 3]],
-            ],
-            data_dims=("samples", "lines", "words"),
-            full_names=("samples", "lines", "words"),
-            lengths=[[1, 2, 3]],
-        )
-
-    assert "dtype must be provided" in str(excinfo.value)
-
 
 @pytest.fixture
 def ft():
@@ -299,6 +286,54 @@ def test_pad_embedding():
         ],
         full_names=("token",),
         data_dims=("token",),
+        dtype=torch.long,
+    )
+    assert (
+        ft.data
+        == torch.tensor(
+            [
+                [0, 1, 2],
+                [3, 4, 0],
+            ]
+        )
+    ).all()
+
+
+def test_empty_args():
+    ft = as_folded_tensor(
+        [
+            [0, 1, 2],
+            [3, 4],
+        ],
+    )
+    assert (
+        ft.data
+        == torch.tensor(
+            [
+                [0, 1, 2],
+                [3, 4, 0],
+            ]
+        )
+    ).all()
+    assert ft.data.dtype == torch.int64
+    assert (
+        ft.mask
+        == torch.tensor(
+            [
+                [1, 1, 1],
+                [1, 1, 0],
+            ]
+        ).bool()
+    ).all()
+
+
+def test_no_data_dims():
+    ft = as_folded_tensor(
+        [
+            [0, 1, 2],
+            [3, 4],
+        ],
+        full_names=("token",),
         dtype=torch.long,
     )
     assert (
