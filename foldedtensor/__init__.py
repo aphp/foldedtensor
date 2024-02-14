@@ -21,7 +21,7 @@ np_to_torch_dtype = {
 
 from . import _C
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 
 # noinspection PyMethodOverriding
