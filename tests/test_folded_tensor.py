@@ -367,3 +367,40 @@ def test_share_memory(ft):
     assert cloned.is_shared()
     assert cloned.indexer.is_shared()
     assert cloned.mask.is_shared()
+
+
+def test_empty_sequence():
+    ft = as_folded_tensor(
+        [
+            [[], [], []],
+            [[], []],
+        ],
+        dtype=torch.float,
+    )
+    assert ft.shape == (2, 3, 0)
+
+
+def test_imbalanced_sequence_1():
+    with pytest.raises(ValueError) as e:
+        as_folded_tensor(
+            [
+                3,
+                [0, 1, 2],
+            ],
+            dtype=torch.float,
+        )
+
+    assert "setting an array element with a sequence." in str(e.value)
+
+
+def test_imbalanced_sequence_2():
+    with pytest.raises(TypeError) as e:
+        as_folded_tensor(
+            [
+                [0, 1, 2],
+                3,
+            ],
+            dtype=torch.float,
+        )
+
+    assert "'int' object is not iterable" in str(e.value)

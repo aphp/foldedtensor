@@ -212,7 +212,11 @@ nested_py_list_to_padded_np_array(
     std::vector<std::tuple<std::vector<int64_t>, int64_t, PyObject *>> operations;
 
     // Index from the data dimension to the dim in the theoretically fully padded list
-    std::vector<int64_t> data_dim_map(*std::max_element(data_dims.begin(), data_dims.end()) + 1, -1);
+    int64_t max_depth = 0;
+    if (data_dims.size() > 0) {
+        max_depth = *std::max_element(data_dims.begin(), data_dims.end()) + 1;
+    }
+    std::vector<int64_t> data_dim_map(max_depth, -1);
     for (unsigned long i = 0; i < data_dims.size(); i++) {
         data_dim_map[data_dims[i]] = i;
     }
@@ -279,7 +283,9 @@ nested_py_list_to_padded_np_array(
             // Set the element in the array and move to the next element
             // Since array elements can be of any size, we use the element size (in
             // bytes) to move from one element to the next
-            PyArray_SETITEM(padded_array.ptr(), array_ptr, items[i]);
+            if (PyArray_SETITEM(padded_array.ptr(), array_ptr, items[i]) < 0) {
+                throw py::error_already_set();
+            }
             array_ptr += itemsize;
 
             // Assign the current index to the indexer and move to the next element

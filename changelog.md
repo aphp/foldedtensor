@@ -1,3 +1,8 @@
+# v0.3.3
+
+- Handle empty inputs (e.g. `as_folded_tensor([[[], []], [[]]])`) by returning an empty tensor
+- Correctly bubble errors when converting inputs with varying deepness (e.g. `as_folded_tensor([1, [2, 3]])`)
+
 # v0.3.2
 
 - Allow to use `as_folded_tensor` with no args, as a simple padding function
