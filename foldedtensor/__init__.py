@@ -99,16 +99,20 @@ type_to_dtype_dict = {
 
 def get_metadata(nested_data):
     item = None
+    deepness = 0
 
-    def rec(seq):
-        nonlocal item
+    def rec(seq, depth=0):
+        nonlocal item, deepness
         if isinstance(seq, (list, tuple)):
+            depth += 1
+            deepness = max(deepness, depth)
             for item in seq:
-                yield from (1 + res for res in rec(item))
+                yield from rec(item, depth)
         else:
-            yield 0
+            yield
 
-    return next(rec(nested_data), 0), type(item)
+    next(rec(nested_data), 0)
+    return deepness, type(item)
 
 
 def as_folded_tensor(
@@ -139,20 +143,24 @@ def as_folded_tensor(
     device: Optional[Unit[str, torch.device]]
         The device of the output tensor
     """
-    if data_dims is not None:
-        data_dims = tuple(
-            dim if isinstance(dim, int) else full_names.index(dim) for dim in data_dims
-        )
-        if (data_dims[-1] + 1) != len(full_names):
-            raise ValueError(
-                "The last dimension of `data_dims` must be the last variable dimension."
+    if full_names is not None:
+        if data_dims is not None:
+            data_dims = tuple(
+                dim if isinstance(dim, int) else full_names.index(dim)
+                for dim in data_dims
             )
-    elif full_names is not None:
-        data_dims = tuple(range(len(full_names)))
+            if (data_dims[-1] + 1) != len(full_names):
+                raise ValueError(
+                    "The last dimension of `data_dims` must be the last variable dimension."
+                )
+        elif full_names is not None:
+            data_dims = tuple(range(len(full_names)))
     if isinstance(data, torch.Tensor) and lengths is not None:
         data_dims = data_dims or tuple(range(len(lengths)))
         np_indexer, shape = _C.make_refolding_indexer(lengths, data_dims)
-        assert shape == list(data.shape[: len(data_dims)])
+        assert shape == list(
+            data.shape[: len(data_dims)]
+        ), f"Shape inferred from lengths is not compatible with data dims: {shape}, {data.shape}, {len(data_dims)}"
         result = FoldedTensor(
             data=data,
             lengths=lengths,
@@ -165,6 +173,8 @@ def as_folded_tensor(
         #     raise ValueError("dtype must be provided when `data` is a sequence")
         if data_dims is None or dtype is None:
             deepness, inferred_dtype = get_metadata(data)
+        else:
+            deepness = len(full_names) if full_names is not None else len(data_dims)
         if data_dims is None:
             data_dims = tuple(range(deepness))
         if dtype is None:
@@ -177,6 +187,8 @@ def as_folded_tensor(
         )
         indexer = torch.from_numpy(indexer)
         padded = torch.from_numpy(padded)
+        # In case of empty sequences, lengths are not computed correctly
+        lengths = (list(lengths) + [[0]] * deepness)[:deepness]
         result = FoldedTensor(
             data=padded,
             lengths=lengths,
