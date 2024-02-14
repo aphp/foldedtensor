@@ -33,7 +33,24 @@ pip install foldedtensor
 - C++ optimized code for fast data loading from Python lists and refolding
 - Flexibility in data representation, making it easy to switch between different layouts when needed
 
-## Example
+## Examples
+
+At its simplest, `foldedtensor` can be used to convert nested Python lists into a PyTorch tensor:
+
+```python
+from foldedtensor import as_folded_tensor
+
+ft = as_folded_tensor(
+    [
+        [0, 1, 2],
+        [3],
+    ],
+)
+# FoldedTensor([[0, 1, 2],
+#               [3, 0, 0]])
+```
+
+You can also specify names and flattened/unflattened dimensions at the time of creation:
 
 ```python
 import torch
@@ -54,7 +71,11 @@ ft = as_folded_tensor(
 print(ft)
 # FoldedTensor([[1, 2, 3],
 #               [4, 3, 0]])
+```
 
+Once created, you can change the shape of the tensor by refolding it:
+
+```python
 # Refold on the lines and words dims (flatten the samples dim)
 print(ft.refold(("lines", "words")))
 # FoldedTensor([[1, 0],
@@ -67,7 +88,11 @@ print(ft.refold(("lines", "words")))
 # Refold on the words dim only: flatten everything
 print(ft.refold(("words",)))
 # FoldedTensor([1, 2, 3, 4, 3])
+```
 
+The tensor can be further used with standard PyTorch operations:
+
+```python
 # Working with PyTorch operations
 embedder = torch.nn.Embedding(10, 16)
 embedding = embedder(ft.refold(("words",)))
@@ -78,6 +103,10 @@ refolded_embedding = embedding.refold(("samples", "words"))
 print(refolded_embedding.shape)
 # torch.Size([2, 5, 16]) # 2 samples, 5 words max, 16 dims
 ```
+
+## Benchmarks
+
+View the comparisons of `foldedtensor` against various alternatives here: [docs/benchmarks](https://github.com/aphp/foldedtensor/blob/main/docs/benchmark.md).
 
 ## Comparison with alternatives
 
