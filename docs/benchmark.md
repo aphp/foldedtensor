@@ -9,7 +9,7 @@ and working with nested lists and tensors.
 
 Versions:
 - `torch.__version__ == '2.0.1'`
-- `foldedtensor.__version__ == '0.3.2'`
+- `foldedtensor.__version__ == '0.3.3'`
 
 
 ## Case 1 (pad variable lengths nested list)
