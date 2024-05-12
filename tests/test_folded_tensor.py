@@ -404,3 +404,16 @@ def test_imbalanced_sequence_2():
         )
 
     assert "'int' object is not iterable" in str(e.value)
+
+
+def test_max():
+    ft = as_folded_tensor(
+        [
+            [0, 1, 2],
+            [3, 4],
+        ],
+        dtype=torch.float,
+    )
+    values, indices = ft.max(-1)
+    assert (values == torch.tensor([2, 4])).all()
+    assert (indices == torch.tensor([2, 1])).all()

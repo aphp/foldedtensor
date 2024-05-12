@@ -1,3 +1,9 @@
+# v0.3.4
+
+- Fix a data_dims access issue
+- Marginally improve the speed of handling FoldedTensors in standard torch operations
+- Use default torch types (e.g. `torch.float32` or `torch.torch64`)
+
 # v0.3.3
 
 - Handle empty inputs (e.g. `as_folded_tensor([[[], []], [[]]])`) by returning an empty tensor
