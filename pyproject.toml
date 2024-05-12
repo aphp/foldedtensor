@@ -9,7 +9,7 @@ readme = "README.md"
 urls.homepage = "https://github.com/aphp/foldedtensor/"
 urls.repository = "https://github.com/aphp/foldedtensor/"
 dynamic = ["version"]
-requires-python = ">3.7.6,<4.0"
+requires-python = ">3.7.1,<4.0"
 
 dependencies = [
     "torch>1.0.0",
@@ -82,7 +82,6 @@ fix = true
 exclude = [
     ".git",
     "__pycache__",
-    "__init__.py",
     ".mypy_cache",
     ".pytest_cache",
     ".venv",
@@ -98,5 +97,6 @@ select = [
 ]
 fixable = ["E", "F", "W", "I"]
 
-[isort]
-known-first-party = ["foldedtensor"]
+[tool.ruff.isort]
+    known-first-party = ["foldedtensor"]
+    known-third-party = ["build"]
