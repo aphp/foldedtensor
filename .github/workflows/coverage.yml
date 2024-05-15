@@ -24,6 +24,9 @@ on:
       coverage-data-pattern:
         required: true
         type: string
+      precision:
+        type: number
+        default: 2
 
 jobs:
   pull-request-coverage:
@@ -64,9 +67,9 @@ jobs:
           echo '## Coverage Report' > /tmp/report.md
 
           if git show ${{ inputs.coverage-branch }}:${{ inputs.coverage-report }} > /tmp/main-coverage.txt; then
-            coverage report --skip-covered --skip-empty --show-missing --format=diff --base-coverage-report=/tmp/main-coverage.txt --base-revision=${{ inputs.base-branch }} --fail-under=base >> /tmp/report.md || status=$?
+            coverage report --skip-covered --skip-empty --show-missing --format=diff --base-coverage-report=/tmp/main-coverage.txt --base-revision=${{ inputs.base-branch }} --precision=${{ inputs.precision }} --fail-under=base >> /tmp/report.md || status=$?
           else
-            coverage report --skip-covered --skip-empty --show-missing --format=diff --base-revision=${{ inputs.base-branch }} >> /tmp/report.md || status=$?
+            coverage report --skip-covered --skip-empty --show-missing --format=diff --base-revision=${{ inputs.base-branch }} --precision=${{ inputs.precision }} >> /tmp/report.md || status=$?
           fi
 
           cat /tmp/report.md >> $GITHUB_STEP_SUMMARY
@@ -120,7 +123,7 @@ jobs:
         run: |
           python -Im pip install --upgrade "git+https://github.com/percevalw/coveragepy.git#egg=coverage[toml]"
           python -Im coverage combine
-          coverage report --show-missing > /tmp/main-coverage.txt
+          coverage report --show-missing --precision=${{ inputs.precision }} > /tmp/main-coverage.txt
 
           # Generate the coverage badge
           curl -s -o generate_badge.py https://raw.githubusercontent.com/aphp/foldedtensor/main/.github/workflows/generate_badge.py
