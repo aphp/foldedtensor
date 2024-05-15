@@ -9,7 +9,7 @@
 
 ![Tests](https://img.shields.io/github/actions/workflow/status/aphp/foldedtensor/tests.yml?branch=main&label=tests&style=flat-square)
 [![PyPI](https://img.shields.io/pypi/v/foldedtensor?color=blue&style=flat-square)](https://pypi.org/project/foldedtensor/)
-[![Codecov](https://img.shields.io/codecov/c/github/aphp/foldedtensor?logo=codecov&style=flat-square)](https://codecov.io/gh/aphp/foldedtensor)
+[![Coverage](https://raw.githubusercontent.com/aphp/foldedtensor/coverage/coverage.svg)](https://raw.githubusercontent.com/aphp/foldedtensor/coverage/coverage.txt)
 [![License](https://img.shields.io/github/license/aphp/foldedtensor?color=x&style=flat-square)](https://github.com/aphp/foldedtensor/blob/main/LICENSE)
 
 # FoldedTensor: PyTorch extension for handling deeply nested sequences of variable length
