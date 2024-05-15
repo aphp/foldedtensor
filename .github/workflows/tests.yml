@@ -66,7 +66,7 @@ jobs:
     uses: ./.github/workflows/coverage.yml
     with:
       base-branch: main
-      coverage-data-pattern: coverage-data-*.xml
+      coverage-data-pattern: coverage-data-*
       coverage-report: coverage.txt
       coverage-badge: coverage.svg
       coverage-branch: coverage
