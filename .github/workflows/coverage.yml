@@ -1,0 +1,141 @@
+name: Coverage
+
+on:
+  workflow_call:
+    inputs:
+      base-branch:
+        required: true
+        type: string
+      badge-template:
+        required: false
+        type: string
+      coverage-branch:
+        required: false
+        type: string
+        default: coverage
+      coverage-report:
+        required: false
+        type: string
+        default: coverage.txt
+      coverage-badge:
+        required: false
+        type: string
+        default: coverage.svg
+      coverage-data-pattern:
+        required: true
+        type: string
+
+jobs:
+  pull-request-coverage:
+    name: Check Pull Request Coverage
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PR_NUMBER: ${{github.event.pull_request.number}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # Use latest Python, so it understands all syntax.
+          python-version: "3.7"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-data-*
+          merge-multiple: true
+
+      - name: Combine coverage
+        run: |
+          python -Im pip install --upgrade "git+https://github.com/percevalw/coveragepy.git#egg=coverage[toml]"
+          python -Im coverage combine
+
+      - name: Compare coverage
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the main branch, so that we can run `git diff main`
+          git fetch origin ${{ inputs.base-branch }}:${{ inputs.base-branch }} --depth=1
+
+          # We share store main coverage data in a separate branch, so we fetch it too
+          git fetch origin ${{ inputs.coverage-branch }}:${{ inputs.coverage-branch }} --depth=1 || true
+
+          # Report and write to summary.
+          echo '## Coverage Report' > /tmp/report.md
+
+          if git show ${{ inputs.coverage-branch }}:${{ inputs.coverage-report }} > /tmp/main-coverage.txt; then
+            coverage report --skip-covered --skip-empty --show-missing --format=diff --base-coverage-report=/tmp/main-coverage.txt --base-revision=${{ inputs.base-branch }} --fail-under=base >> /tmp/report.md || status=$?
+          else
+            coverage report --skip-covered --skip-empty --show-missing --format=diff --base-revision=main >> /tmp/report.md || status=$?
+          fi
+
+          cat /tmp/report.md >> $GITHUB_STEP_SUMMARY
+
+          COMMENT_BODY_JSON=$(jq -Rs . <<< $(cat /tmp/report.md))
+          HEADER="Authorization: token $GITHUB_TOKEN"
+          PR_COMMENTS_URL="https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments"
+
+          # Fetch existing comments to find if one from this workflow already exists
+          COMMENTS=$(curl -s -H "$HEADER" "$PR_COMMENTS_URL")
+          COMMENT_ID=$(echo "$COMMENTS" | jq -r '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("## Coverage Report"))) | .id')
+
+          # Check if we have a comment ID, if so, update it, otherwise create a new one
+          if [[ "$COMMENT_ID" ]]; then
+            # Update existing comment
+            curl -s -X PATCH -H "$HEADER" -H "Content-Type: application/json" -d "{\"body\": $COMMENT_BODY_JSON}" "https://api.github.com/repos/${{ github.repository }}/issues/comments/$COMMENT_ID"
+          else
+            # Post new comment
+            curl -s -X POST -H "$HEADER" -H "Content-Type: application/json" -d "{\"body\": $COMMENT_BODY_JSON}" "$PR_COMMENTS_URL"
+          fi
+
+          if [ $status -ne 0 ]; then
+            exit $status
+          fi
+
+  main-coverage:
+    name: Update Base Coverage
+    if: github.ref_name == inputs.base-branch
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PR_NUMBER: ${{github.event.pull_request.number}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # Use the earliest possible version of Python due to a bug in coveragepy.
+          # See https://github.com/nedbat/coveragepy/issues/1572
+          python-version: "3.7"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ inputs.coverage-data-pattern }}
+          merge-multiple: true
+
+      - name: Set up Git
+        run: |
+          git config user.name ${{ github.actor }}
+          git config user.email ${{ github.actor }}@users.noreply.github.com
+
+      - uses: actions/checkout@v4
+        with:
+          repository: aphp/foldedtensor
+          sparse-checkout: |
+            .github/workflows/generate_badge.py
+
+      - name: Combine coverage and generate the report and the badge
+        run: |
+          python -Im pip install --upgrade "git+https://github.com/percevalw/coveragepy.git[toml]"
+          python -Im coverage combine
+          coverage report --show-missing > /tmp/main-coverage.txt
+
+          # Generate the coverage badge
+          python .github/workflows/generate_badge.py -r /tmp/main-coverage.txt -t ${{ inputs.badge-template.svg }} > /tmp/coverage.svg
+
+          git fetch origin ${{ inputs.coverage-branch }}:${{ inputs.coverage-branch }} --depth=1 || true
+          git checkout ${{ inputs.coverage-branch }} || git checkout --orphan ${{ inputs.coverage-branch }}
+          git reset --hard
+          cp /tmp/main-coverage.txt ${{ inputs.coverage-report }}
+          cp /tmp/coverage.svg ${{ inputs.coverage-badge }}
+          git add ${{ inputs.coverage-report }} ${{ inputs.coverage-badge }}
+          git commit -m "Update main coverage"
+          git push origin ${{ inputs.coverage-branch }}

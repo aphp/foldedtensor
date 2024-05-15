@@ -54,6 +54,14 @@ testpaths = [
     "tests",
 ]
 
+[tool.coverage.run]
+concurrency = ["multiprocessing"]
+parallel = true
+include = ['foldedtensor/*']
+
+[tool.coverage.report]
+include = ['foldedtensor/*']
+precision = 1
 
 [build-system]
 requires = [
