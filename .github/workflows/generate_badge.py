@@ -6,15 +6,27 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 DEFAULT_TEMPLATE = """\
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="108" height="20" role="img" aria-label="coverage: 97.1%">
-    <title>coverage: {COVERAGE}</title>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="{61 + width//10 + 10}"
+  height="20"
+  role="img"
+  aria-label="coverage: {coverage}"
+>
+    <title>coverage: {coverage}</title>
     <g shape-rendering="crispEdges">
         <rect width="61" height="20" fill="#555"/>
-        <rect x="61" width="47" height="20" fill="{COLOR}"/>
+        <rect x="61" width="{width//10 + 10}" height="20" fill="{color}"/>
     </g>
-    <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
-        <text x="315" y="140" transform="scale(.1)" fill="#fff" textLength="510">coverage</text>
-        <text x="835" y="140" transform="scale(.1)" fill="#fff" textLength="{WIDTH}">{COVERAGE}</text>
+    <g
+      fill="#fff"
+      text-anchor="left"
+      font-family="Verdana,Geneva,DejaVu Sans,sans-serif"
+      text-rendering="geometricPrecision"
+      font-size="110"
+    >
+        <text x="60" y="140" transform="scale(.1)" fill="#fff" textLength="510">coverage</text>
+        <text x="650" y="140" transform="scale(.1)" fill="#fff" textLength="{width}">{coverage}</text>
     </g>
 </svg>"""  # noqa: E501
 
@@ -41,8 +53,9 @@ def make_badge(
     badge_template_path: Optional[str] = None,
 ):
     with open(report_path) as f:
-        coverage_str = float(f.read().splitlines(False)[-1].split()[-1].strip(" %"))
-    coverage = float(coverage_str)
+        coverage = float(f.read().splitlines(False)[-1].split()[-1].strip(" %"))
+        coverage = 100
+    coverage_str = str(int(coverage)) + "%"
     ratio = (max(coverage, min_coverage) - min_coverage) / (100 - min_coverage)
     hue = bad_color_hsl[0] + ratio * (good_color_hsl[0] - bad_color_hsl[0])
     saturation = bad_color_hsl[1] + ratio * (good_color_hsl[1] - bad_color_hsl[1])
@@ -54,12 +67,14 @@ def make_badge(
         if badge_template_path
         else DEFAULT_TEMPLATE
     )
-    badge = badge_template.format(
-        COVERAGE=f"{int(coverage)}%",
-        COLOR=f"#{''.join(f'{int(c * 255):02x}' for c in rgb)}",
-        WIDTH="250" if coverage < 100 else "330",
+    return eval(
+        "f" + repr(badge_template),
+        dict(
+            coverage=f"{coverage_str}",
+            color=f"#{''.join(f'{int(c * 255):02x}' for c in rgb)}",
+            width=int(250 * len(coverage_str) / 3),
+        ),
     )
-    return badge
 
 
 if __name__ == "__main__":

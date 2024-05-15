@@ -66,7 +66,7 @@ jobs:
           if git show ${{ inputs.coverage-branch }}:${{ inputs.coverage-report }} > /tmp/main-coverage.txt; then
             coverage report --skip-covered --skip-empty --show-missing --format=diff --base-coverage-report=/tmp/main-coverage.txt --base-revision=${{ inputs.base-branch }} --fail-under=base >> /tmp/report.md || status=$?
           else
-            coverage report --skip-covered --skip-empty --show-missing --format=diff --base-revision=main >> /tmp/report.md || status=$?
+            coverage report --skip-covered --skip-empty --show-missing --format=diff --base-revision=${{ inputs.base-branch }} >> /tmp/report.md || status=$?
           fi
 
           cat /tmp/report.md >> $GITHUB_STEP_SUMMARY
@@ -116,20 +116,15 @@ jobs:
           git config user.name ${{ github.actor }}
           git config user.email ${{ github.actor }}@users.noreply.github.com
 
-      - uses: actions/checkout@v4
-        with:
-          repository: aphp/foldedtensor
-          sparse-checkout: |
-            .github/workflows/generate_badge.py
-
       - name: Combine coverage and generate the report and the badge
         run: |
-          python -Im pip install --upgrade "git+https://github.com/percevalw/coveragepy.git[toml]"
+          python -Im pip install --upgrade "git+https://github.com/percevalw/coveragepy.git#egg=coverage[toml]"
           python -Im coverage combine
           coverage report --show-missing > /tmp/main-coverage.txt
 
           # Generate the coverage badge
-          python .github/workflows/generate_badge.py -r /tmp/main-coverage.txt -t ${{ inputs.badge-template.svg }} > /tmp/coverage.svg
+          curl -s -o generate_badge.py https://raw.githubusercontent.com/aphp/foldedtensor/main/.github/workflows/generate_badge.py
+          python generate_badge.py -r /tmp/main-coverage.txt -t ${{ inputs.badge-template.svg }} > /tmp/coverage.svg
 
           git fetch origin ${{ inputs.coverage-branch }}:${{ inputs.coverage-branch }} --depth=1 || true
           git checkout ${{ inputs.coverage-branch }} || git checkout --orphan ${{ inputs.coverage-branch }}
