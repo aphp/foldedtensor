@@ -129,6 +129,10 @@ def get_metadata(nested_data):
     return deepness, type(item)
 
 
+def my_test():
+    pass
+
+
 def as_folded_tensor(
     data: Sequence,
     data_dims: Optional[Sequence[Union[int, str]]] = None,
