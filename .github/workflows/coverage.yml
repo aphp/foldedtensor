@@ -24,9 +24,6 @@ on:
       coverage-data-pattern:
         required: true
         type: string
-      precision:
-        type: number
-        default: 2
 
 jobs:
   pull-request-coverage:
@@ -71,7 +68,6 @@ jobs:
                   --skip-covered \
                   --skip-empty \
                   --show-missing \
-                  --precision="${{ inputs.precision }}" \
                   --sort=-diff \
                   --format=diff \
                   --base-coverage-report=/tmp/main-coverage.txt \
@@ -83,7 +79,6 @@ jobs:
                   --skip-covered \
                   --skip-empty \
                   --show-missing \
-                  --precision="${{ inputs.precision }}" \
                   --sort=-miss \
                   --format=diff \
                   --base-revision="${{ inputs.base-branch }}" \
@@ -141,7 +136,7 @@ jobs:
         run: |
           python -Im pip install --upgrade "git+https://github.com/percevalw/coveragepy.git#egg=coverage[toml]"
           python -Im coverage combine
-          coverage report --show-missing --precision=${{ inputs.precision }} > /tmp/main-coverage.txt
+          coverage report --show-missing > /tmp/main-coverage.txt
 
           # Generate the coverage badge
           curl -s -o generate_badge.py https://raw.githubusercontent.com/aphp/foldedtensor/main/.github/workflows/generate_badge.py

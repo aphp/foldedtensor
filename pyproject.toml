@@ -61,7 +61,7 @@ include = ['foldedtensor/*']
 
 [tool.coverage.report]
 include = ['foldedtensor/*']
-precision = 1
+precision = 2
 
 [build-system]
 requires = [
