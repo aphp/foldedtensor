@@ -54,7 +54,6 @@ def make_badge(
 ):
     with open(report_path) as f:
         coverage = float(f.read().splitlines(False)[-1].split()[-1].strip(" %"))
-        coverage = 100
     coverage_str = str(int(coverage)) + "%"
     ratio = (max(coverage, min_coverage) - min_coverage) / (100 - min_coverage)
     hue = bad_color_hsl[0] + ratio * (good_color_hsl[0] - bad_color_hsl[0])
