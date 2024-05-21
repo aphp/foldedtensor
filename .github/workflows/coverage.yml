@@ -136,17 +136,17 @@ jobs:
         run: |
           python -Im pip install --upgrade "git+https://github.com/percevalw/coveragepy.git#egg=coverage[toml]"
           python -Im coverage combine
-          coverage report --show-missing > /tmp/main-coverage.txt
+          coverage report --show-missing > /tmp/coverage.txt
 
           # Generate the coverage badge
           curl -s -o generate_badge.py https://raw.githubusercontent.com/aphp/foldedtensor/main/.github/workflows/generate_badge.py
-          python generate_badge.py -r /tmp/main-coverage.txt -t ${{ inputs.badge-template.svg }} > /tmp/coverage.svg
+          python generate_badge.py -r /tmp/coverage.txt > /tmp/coverage.svg
 
           git fetch origin ${{ inputs.coverage-branch }}:${{ inputs.coverage-branch }} --depth=1 || true
           git checkout ${{ inputs.coverage-branch }} || git checkout --orphan ${{ inputs.coverage-branch }}
           git reset --hard
-          cp /tmp/main-coverage.txt ${{ inputs.coverage-report }}
+          cp /tmp/coverage.txt ${{ inputs.coverage-report }}
           cp /tmp/coverage.svg ${{ inputs.coverage-badge }}
           git add ${{ inputs.coverage-report }} ${{ inputs.coverage-badge }}
-          git commit -m "Update main coverage"
+          git commit -m "Update main coverage" || true
           git push origin ${{ inputs.coverage-branch }}
