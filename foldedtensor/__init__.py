@@ -1,3 +1,5 @@
+import typing
+from collections import UserList
 from multiprocessing.reduction import ForkingPickler
 from typing import List, Optional, Sequence, Tuple, Union
 
@@ -44,6 +46,15 @@ except AttributeError:
     DisableTorchFunctionSubclass = torch._C.DisableTorchFunction
 
 __version__ = "0.3.4"
+
+
+class FoldedTensorLengths(UserList):
+    def __hash__(self):
+        return id(self)
+
+
+if typing.TYPE_CHECKING:
+    FoldedTensorLengths = List[List[int]]  # noqa: F811
 
 
 # noinspection PyMethodOverriding
@@ -179,7 +190,7 @@ def as_folded_tensor(
         )
         result = FoldedTensor(
             data=data,
-            lengths=lengths,
+            lengths=FoldedTensorLengths(lengths),
             data_dims=data_dims,
             full_names=full_names,
             indexer=torch.from_numpy(np_indexer).to(data.device),
@@ -207,7 +218,7 @@ def as_folded_tensor(
         lengths = (list(lengths) + [[0]] * deepness)[:deepness]
         result = FoldedTensor(
             data=padded,
-            lengths=lengths,
+            lengths=FoldedTensorLengths(lengths),
             data_dims=data_dims,
             full_names=full_names,
             indexer=indexer,
@@ -269,7 +280,7 @@ class FoldedTensor(torch.Tensor):
     def __new__(
         cls,
         data: torch.Tensor,
-        lengths: List[List[int]],
+        lengths: FoldedTensorLengths,
         data_dims: Sequence[int],
         full_names: Sequence[str],
         indexer: torch.Tensor,
