@@ -417,3 +417,17 @@ def test_max():
     values, indices = ft.max(-1)
     assert (values == torch.tensor([2, 4])).all()
     assert (indices == torch.tensor([2, 1])).all()
+
+
+def test_hashable_lengths():
+    tensor = as_folded_tensor(
+        [
+            [0, 1, 2],
+            [3, 4],
+        ],
+        dtype=torch.long,
+    )
+    embedding = torch.nn.Embedding(10, 16)
+    assert tensor.lengths is embedding(tensor).lengths
+    assert hash(tensor.lengths) is not None
+    assert hash(tensor.lengths) == hash(embedding(tensor).lengths)
