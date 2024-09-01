@@ -13,7 +13,7 @@ requires-python = ">3.7.1,<4.0"
 
 dependencies = [
     "torch>1.0.0",
-    "numpy",
+    "numpy<2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +62,24 @@ include = ['foldedtensor/*']
 [tool.coverage.report]
 include = ['foldedtensor/*']
 precision = 2
+omit = [
+    "tests/*",
+]
+exclude_lines = [
+    "def __repr__",
+    "if __name__ == .__main__.:",
+    "@overload",
+    "pragma: no cover",
+    "raise .*Error",
+    "raise .*Exception",
+    "warn\\(",
+    "if __name__ == .__main__.:",
+    "if repr_id in exclude:",
+    "if TYPE_CHECKING:",
+    "if typing.TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
 
 [build-system]
 requires = [
