@@ -402,9 +402,16 @@ class FoldedTensor(torch.Tensor):
                 "sequence or each arguments to be ints or strings"
             )
             dims = dims[0]
-        dims = tuple(
-            dim if isinstance(dim, int) else self.full_names.index(dim) for dim in dims
-        )
+        try:
+            dims = tuple(
+                dim if isinstance(dim, int) else self.full_names.index(dim)
+                for dim in dims
+            )
+        except ValueError:
+            raise ValueError(
+                f"Folded tensor with available dimensions {self.full_names} "
+                f"could not be refolded with dimensions {list(dims)}"
+            )
 
         if dims == self.data_dims:
             return self

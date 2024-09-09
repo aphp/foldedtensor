@@ -431,3 +431,18 @@ def test_hashable_lengths():
     assert tensor.lengths is embedding(tensor).lengths
     assert hash(tensor.lengths) is not None
     assert hash(tensor.lengths) == hash(embedding(tensor).lengths)
+
+
+def test_missing_dims():
+    tensor = as_folded_tensor(
+        [
+            [0, 1, 2],
+            [3, 4],
+        ],
+        full_names=("sample", "token"),
+        dtype=torch.long,
+    )
+    with pytest.raises(ValueError) as e:
+        tensor.refold("line", "token")
+
+    assert "line" in str(e.value)
