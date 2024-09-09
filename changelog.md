@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## v0.3.5
 
 - Support hashing the `folded_tensor.length` field (via a UserList), which is convenient for caching
+- Improve error messaging when refolding with missing dims
 
 ## v0.3.4
 
