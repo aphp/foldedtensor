@@ -11,6 +11,7 @@
 [![PyPI](https://img.shields.io/pypi/v/foldedtensor?color=blue&style=flat-square)](https://pypi.org/project/foldedtensor/)
 [![Coverage](https://raw.githubusercontent.com/aphp/foldedtensor/coverage/coverage.svg)](https://raw.githubusercontent.com/aphp/foldedtensor/coverage/coverage.txt)
 [![License](https://img.shields.io/github/license/aphp/foldedtensor?color=x&style=flat-square)](https://github.com/aphp/foldedtensor/blob/main/LICENSE)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/foldedtensor?style=flat-square&color=purple)
 
 # FoldedTensor: PyTorch extension for handling deeply nested sequences of variable length
 
