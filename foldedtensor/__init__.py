@@ -1,4 +1,5 @@
 import typing
+import warnings
 from collections import UserList
 from multiprocessing.reduction import ForkingPickler
 from typing import List, Optional, Sequence, Tuple, Union
@@ -420,23 +421,28 @@ class FoldedTensor(torch.Tensor):
 
 
 def reduce_foldedtensor(self: FoldedTensor):
-    return (
-        FoldedTensor,
-        (
-            self.data.as_tensor(),
-            self.lengths,
-            self.data_dims,
-            self.full_names,
-            self.indexer.clone()
-            if self.indexer.is_shared() and self.indexer.storage().is_cuda
-            else self.indexer,
-            None
-            if self._mask is not None
-            and self._mask.is_shared()
-            and self._mask.storage().is_cuda
-            else self._mask,
-        ),
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter(
+            "ignore",
+            category=UserWarning,
+        )
+        return (
+            FoldedTensor,
+            (
+                self.data.as_tensor(),
+                self.lengths,
+                self.data_dims,
+                self.full_names,
+                self.indexer.clone()
+                if self.indexer.is_shared() and self.indexer.storage().is_cuda
+                else self.indexer,
+                None
+                if self._mask is not None
+                and self._mask.is_shared()
+                and self._mask.storage().is_cuda
+                else self._mask,
+            ),
+        )
 
 
 ForkingPickler.register(FoldedTensor, reduce_foldedtensor)
