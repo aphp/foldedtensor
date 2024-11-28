@@ -46,7 +46,7 @@ try:
 except AttributeError:
     DisableTorchFunctionSubclass = torch._C.DisableTorchFunction
 
-__version__ = "0.3.5"
+__version__ = "0.3.6"
 
 
 class FoldedTensorLengths(UserList):
