@@ -29,7 +29,7 @@ jobs:
   pull-request-coverage:
     name: Check Pull Request Coverage
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     env:
       GITHUB_PR_NUMBER: ${{github.event.pull_request.number}}
     steps:
@@ -111,7 +111,7 @@ jobs:
   main-coverage:
     name: Update Base Coverage
     if: github.ref_name == inputs.base-branch
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     env:
       GITHUB_PR_NUMBER: ${{github.event.pull_request.number}}
     steps:
