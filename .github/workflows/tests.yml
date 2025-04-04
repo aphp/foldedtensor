@@ -46,13 +46,20 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -e '.[dev]'
+          echo "Up-to-date numpy version:" $(python -c "import numpy; print(numpy.__version__)")
 
-      - name: Test with Pytest on Python ${{ matrix.python-version }}
+      - name: Test with Pytest on Python ${{ matrix.python-version }} with up-to-date Numpy
         run: python -m pytest --cov foldedtensor --cov-report xml --ignore tests/test_docs.py
         if: matrix.python-version != '3.9'
 
-      - name: Test with Pytest on Python ${{ matrix.python-version }}
+      - name: Test with Pytest on Python ${{ matrix.python-version }} with up-to-date Numpy
         run: coverage run -m pytest
+
+      - name: Test with Pytest on Python ${{ matrix.python-version }} with oldest Numpy
+        run: |
+          pip install "oldest-supported-numpy"
+          echo "Old numpy version:" $(python -c "import numpy; print(numpy.__version__)")
+          python -m pytest
 
       - name: Upload coverage data
         uses: actions/upload-artifact@v4
