@@ -2,7 +2,7 @@
 #pragma ide diagnostic ignored "cppcoreguidelines-narrowing-conversions"
 
 #include <Python.h>
-#include <numpy/ndarraytypes.h>
+#include <numpy/ndarrayobject.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
@@ -201,7 +201,6 @@ nested_py_list_to_padded_np_array(
         const py::list &nested_list,
         std::vector<int> data_dims,
         py::dtype &dtype) {
-
     // Will contain the variable lengths of the nested lists
     // One sequence per dimension, containing the lengths of the lists at that dimension
     std::vector<std::vector<int64_t>> lengths;
@@ -283,7 +282,7 @@ nested_py_list_to_padded_np_array(
             // Set the element in the array and move to the next element
             // Since array elements can be of any size, we use the element size (in
             // bytes) to move from one element to the next
-            if (PyArray_SETITEM(padded_array.ptr(), array_ptr, items[i]) < 0) {
+            if (PyArray_SETITEM((PyArrayObject *)padded_array.ptr(), array_ptr, items[i]) < 0) {
                 throw py::error_already_set();
             }
             array_ptr += itemsize;
@@ -301,7 +300,16 @@ nested_py_list_to_padded_np_array(
     return {padded_array, indexer, lengths};
 }
 
+// Helper function to initialize the NumPy C API.
+static bool init_numpy() {
+    import_array();
+    return true;
+}
+
 PYBIND11_MODULE(_C, m) {
+    // Initialize the NumPy API.
+    init_numpy();
+
     m.def("make_refolding_indexer", &make_refolding_indexer, "Build an indexer to refold data into a different shape");
     m.def("nested_py_list_to_padded_array", &nested_py_list_to_padded_np_array, "Converts a nested Python list to a padded array");
 }
