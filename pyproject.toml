@@ -2,18 +2,39 @@
 name = "foldedtensor"
 description = "PyTorch extension for handling deeply nested sequences of variable length"
 authors = [
-    { name = "Perceval Wajsbürt", email = "perceval.wajsburt-ext@aphp.fr" },
+    { name = "Perceval Wajsbürt", email = "perceval.wajsburt@aphp.fr" },
 ]
 license = { file = "LICENSE" }
 readme = "README.md"
 urls.homepage = "https://github.com/aphp/foldedtensor/"
 urls.repository = "https://github.com/aphp/foldedtensor/"
 dynamic = ["version"]
-requires-python = ">3.7.1,<4.0"
+requires-python = ">=3.7.1,<4.0"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: C++",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 
 dependencies = [
     "torch>1.0.0",
-    "numpy<2.0.0",
+    "numpy",
 ]
 
 [project.optional-dependencies]
@@ -82,10 +103,12 @@ exclude_lines = [
 ]
 
 [build-system]
+# Numpy >=1.25 only supports Python 3.9 and above
 requires = [
     "setuptools",
     "pybind11>=2.10.4",
-    "oldest-supported-numpy"
+    "oldest-supported-numpy; python_version<'3.9'",
+    "numpy>=2.0; python_version>='3.9'",
 ]
 build-backend = "setuptools.build_meta"
 
