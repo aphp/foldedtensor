@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## v0.4.0
 
 - Fix `storage` torch warning
+- Support numpy 2.0 and Python 3.11, 3.12 and 3.13 🎉
 
 ## v0.3.5
 
