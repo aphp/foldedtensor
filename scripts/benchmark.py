@@ -1,14 +1,15 @@
 # ruff: noqa: F401, E501
 import contextlib
 import random
+import subprocess
+import sys
 import warnings
 from timeit import Timer
 
+import foldedtensor  # noqa: F401
 import torch
 import torch.nested
 import torch.nn.utils.rnn
-
-import foldedtensor  # noqa: F401
 
 warnings.filterwarnings("ignore")
 
@@ -108,6 +109,7 @@ def timeit(stmt, number=100, repeat=5):
         "# %d loop%s, best of %d: %s per loop\n"
         % (number, "s" if number != 1 else "", repeat, format_time(best))
     )
+    return best
 
 
 print(
@@ -120,9 +122,11 @@ This file was generated from [`scripts/benchmark.py`](../scripts/benchmark.py).
 It compares the performance of `foldedtensor` with various alternatives for padding
 and working with nested lists and tensors.
 
-Versions:
+Environment:
 - `torch.__version__ == {torch.__version__!r}`
 - `foldedtensor.__version__ == {foldedtensor.__version__!r}`
+- `python == {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}`
+- `sys.platform == {sys.platform!r}`
 """
 )
 
@@ -139,40 +143,53 @@ if __name__ == "__main__":
             exec_and_print("nested_list = make_nested_list(32, (50, 100), (25, 30), value=1)")
 
             print("Comparisons:")
-            timeit("python_padding(nested_list)")
-            timeit("foldedtensor.as_folded_tensor(nested_list)")
+            alt = []
+            alt.append(timeit("python_padding(nested_list)"))
+            ft_time = timeit("foldedtensor.as_folded_tensor(nested_list)")
+
+        print(f"Speedup against best alternative: **{alt[0] / ft_time:.2f}x** :rocket:")
 
     if 2 in cases:
         print("\n## Case 2 (same lengths nested lists)\n")
 
         with block_code():
             exec_and_print("nested_list = make_nested_list(32, 100, 30, value=1)")
-            timeit("torch.tensor(nested_list)")
-            timeit("torch.LongTensor(nested_list)")
-            timeit("python_padding(nested_list)")
-            timeit("torch.nested.nested_tensor([torch.LongTensor(sub) for sub in nested_list]).to_padded_tensor(0)")
-            timeit("foldedtensor.as_folded_tensor(nested_list)")
+            alt = []
+            alt.append(timeit("torch.tensor(nested_list)"))
+            alt.append(timeit("torch.LongTensor(nested_list)"))
+            alt.append(timeit("python_padding(nested_list)"))
+            alt.append(timeit("torch.nested.nested_tensor([torch.LongTensor(sub) for sub in nested_list]).to_padded_tensor(0)"))
+            ft_time = timeit("foldedtensor.as_folded_tensor(nested_list)")
+
+        print(f"Speedup against best alternative: **{min(alt) / ft_time:.2f}x** :rocket:")
 
     if 3 in cases:
         print("\n## Case 3 (simple list)\n")
 
         with block_code():
             exec_and_print("simple_list = make_nested_list(10000, value=1)")
-            timeit("torch.tensor(simple_list)")
-            timeit("torch.LongTensor(simple_list)")
-            timeit("python_padding(simple_list)")
-            timeit("foldedtensor.as_folded_tensor(simple_list)")
+            alt = []
+            alt.append(timeit("torch.tensor(simple_list)"))
+            alt.append(timeit("torch.LongTensor(simple_list)"))
+            alt.append(timeit("python_padding(simple_list)"))
+            ft_time = timeit("foldedtensor.as_folded_tensor(simple_list)")
+
+        print(f"Speedup against best alternative: **{min(alt) / ft_time:.2f}x** :rocket:")
 
     if 4 in cases:
         print("\n## Case 4 (same lengths nested lists to flat tensor)\n")
 
         with block_code():
             exec_and_print("nested_list = make_nested_list(32, 100, 30, value=1)")
-            timeit("torch.tensor(nested_list).view(-1)")
-            timeit("torch.LongTensor(nested_list).view(-1)")
-            timeit("python_padding(nested_list).view(-1)")
-            timeit("foldedtensor.as_folded_tensor(nested_list).view(-1)")
-            timeit("foldedtensor.as_folded_tensor(nested_list, data_dims=(2,))")
+            alt = []
+            ft_times = []
+            alt.append(timeit("torch.tensor(nested_list).view(-1)"))
+            alt.append(timeit("torch.LongTensor(nested_list).view(-1)"))
+            alt.append(timeit("python_padding(nested_list).view(-1)"))
+            ft_times.append(timeit("foldedtensor.as_folded_tensor(nested_list).view(-1)"))
+            ft_times.append(timeit("foldedtensor.as_folded_tensor(nested_list, data_dims=(2,))"))
+
+        print(f"Speedup against best alternative: **{min(alt) / max(ft_times):.2f}x** :rocket:")
 
     if 5 in cases:
         print("## Case 5 (variable lengths nested lists) to padded embeddings\n")
@@ -184,12 +201,17 @@ if __name__ == "__main__":
 
             print("# Padding with 0\n")
 
-            timeit("torch.nested.nested_tensor([torch.LongTensor(sub) for sub in nested_list]).to_padded_tensor(0)")
-            timeit("foldedtensor.as_folded_tensor(nested_list).as_tensor()")
+            nt_time = timeit("torch.nested.nested_tensor([torch.LongTensor(sub) for sub in nested_list]).to_padded_tensor(0)")
+            ft_time = timeit("foldedtensor.as_folded_tensor(nested_list).as_tensor()")
 
+        print(f"Speedup against best alternative: **{nt_time / ft_time:.2f}x** :rocket:")
+
+        with block_code():
             print("# Padding with 1\n")
-            timeit("torch.nested.nested_tensor([torch.FloatTensor(sub) for sub in nested_list]).to_padded_tensor(1)")
-            timeit("x = foldedtensor.as_folded_tensor(nested_list); x.masked_fill_(x.mask, 1)")
+            nt_time = timeit("torch.nested.nested_tensor([torch.FloatTensor(sub) for sub in nested_list]).to_padded_tensor(1)")
+            ft_time = timeit("x = foldedtensor.as_folded_tensor(nested_list); x.masked_fill_(x.mask, 1)")
+
+        print(f"Speedup against best alternative: **{nt_time / ft_time:.2f}x** :rocket:")
 
     if 6 in cases:
         print("\n## Case 6 (2d padding)\n")
@@ -197,13 +219,16 @@ if __name__ == "__main__":
         with block_code():
             exec_and_print("nested_list = make_nested_list(160, (50, 150), value=1)")
 
-            timeit("python_padding(nested_list)")
-            timeit("torch.nested.nested_tensor([torch.LongTensor(sub) for sub in nested_list]).to_padded_tensor(0)")
-            timeit(
-                "torch.nn.utils.rnn.pad_sequence([torch.LongTensor(sub) for sub in nested_list], batch_first=True, padding_value=0)")
-            timeit("foldedtensor.as_folded_tensor(nested_list)")
+            alt = []
+            alt.append(timeit("python_padding(nested_list)"))
+            alt.append(timeit("torch.nested.nested_tensor([torch.LongTensor(sub) for sub in nested_list]).to_padded_tensor(0)"))
+            alt.append(timeit("torch.nn.utils.rnn.pad_sequence([torch.LongTensor(sub) for sub in nested_list], batch_first=True, padding_value=0)"))
+            ft_time = timeit("foldedtensor.as_folded_tensor(nested_list)")
+
+        print(f"Speedup against best alternative: **{min(alt) / ft_time:.2f}x** :rocket:")
 
     if 7 in cases:
+        # Test case not working yet
 
         def sum_all_words_per_sample(ft):
             lengths = ft.lengths
@@ -235,8 +260,10 @@ if __name__ == "__main__":
                 "nt = embedder(nt)\n"
             )
 
-            timeit("nt.sum(dim=1)")
-            timeit("sum_all_words_per_sample(ft)")
+            nt_time = timeit("nt.sum(dim=1)")
+            ft_time = timeit("sum_all_words_per_sample(ft)")
+
+        print(f"Speedup against best alternative: **{nt_time / ft_time:.2f}x** :rocket:")
 
         # timeit("embedder(ft)")
         # timeit("embedder(ft).refold(0, 1)")
