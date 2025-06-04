@@ -47,10 +47,13 @@ ft = as_folded_tensor(
         [0, 1, 2],
         [3],
     ],
+    pad_value=-1,
 )
 # FoldedTensor([[0, 1, 2],
-#               [3, 0, 0]])
+#               [3, -1, -1]])
 ```
+
+`pad_value` allows changing the value used to pad the nested sequences.
 
 You can also specify names and flattened/unflattened dimensions at the time of creation:
 
@@ -86,6 +89,15 @@ print(ft.refold(("lines", "words")))
 #               [0, 0],
 #               [2, 3],
 #               [4, 3]])
+
+# Use a custom value for padding when refolding
+print(ft.refold(("lines", "words"), pad_value=-1))
+# FoldedTensor([[ 1, -1],
+#               [-1, -1],
+#               [-1, -1],
+#               [-1, -1],
+#               [ 2,  3],
+#               [ 4,  3]])
 
 # Refold on the words dim only: flatten everything
 print(ft.refold(("words",)))

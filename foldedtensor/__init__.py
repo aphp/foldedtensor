@@ -65,6 +65,7 @@ class Refold(Function):
         ctx,
         self: "FoldedTensor",
         dims: Tuple[int],
+        pad_value: Union[int, float, bool] = 0,
     ) -> "FoldedTensor":
         ctx.set_materialize_grads(False)
         ctx.lengths = self.lengths
@@ -82,8 +83,11 @@ class Refold(Function):
         indexer = torch.from_numpy(np_new_indexer).to(device)
         ctx.output_indexer = indexer
         shape_suffix = data.shape[len(self.data_dims) :]
-        refolded_data = torch.zeros(
-            (*shape_prefix, *shape_suffix), dtype=data.dtype, device=device
+        refolded_data = torch.full(
+            (*shape_prefix, *shape_suffix),
+            pad_value,
+            dtype=data.dtype,
+            device=device,
         )
         refolded_data.view(-1, *shape_suffix)[indexer] = data.view(
             -1, *shape_suffix
@@ -112,7 +116,7 @@ class Refold(Function):
         grad_input.view(-1, *shape_suffix)[ctx.input_indexer] = grad_output.reshape(
             -1, *shape_suffix
         ).index_select(0, ctx.output_indexer)
-        return grad_input, None
+        return grad_input, None, None
 
 
 type_to_dtype_dict = {
@@ -148,6 +152,7 @@ def as_folded_tensor(
     dtype: Optional[torch.dtype] = None,
     lengths: Optional[List[List[int]]] = None,
     device: Optional[Union[str, torch.device]] = None,
+    pad_value: Union[int, float, bool] = 0,
 ):
     """
     Converts a tensor or nested sequence into a FoldedTensor.
@@ -168,6 +173,8 @@ def as_folded_tensor(
         must be provided. If `data` is a sequence, this argument must be `None`.
     device: Optional[Unit[str, torch.device]]
         The device of the output tensor
+    pad_value: Union[int, float, bool]
+        Value used to pad the nested sequences. Defaults to ``0``.
     """
     if full_names is not None:
         if data_dims is not None:
@@ -212,6 +219,7 @@ def as_folded_tensor(
             data,
             data_dims,
             np.dtype(dtype),
+            pad_value,
         )
         indexer = torch.from_numpy(indexer)
         padded = torch.from_numpy(padded)
@@ -396,7 +404,20 @@ class FoldedTensor(torch.Tensor):
             cloned._mask = self._mask.clone()
         return cloned
 
-    def refold(self, *dims: Union[Sequence[Union[int, str]], int, str]):
+    def refold(
+        self,
+        *dims: Union[Sequence[Union[int, str]], int, str],
+        pad_value: Union[int, float, bool] = 0,
+    ):
+        """Change which dimensions are padded.
+
+        Parameters
+        ----------
+        *dims: Union[Sequence[Union[int, str]], int, str]
+            Dimensions to keep padded.
+        pad_value: Union[int, float, bool]
+            Value used to pad the folded dimensions. Defaults to ``0``.
+        """
         if not isinstance(dims[0], (int, str)):
             assert len(dims) == 1, (
                 "Expected the first only argument to be a "
@@ -414,10 +435,10 @@ class FoldedTensor(torch.Tensor):
                 f"could not be refolded with dimensions {list(dims)}"
             )
 
-        if dims == self.data_dims:
+        if dims == self.data_dims and pad_value == 0:
             return self
 
-        return Refold.apply(self, dims)
+        return Refold.apply(self, dims, pad_value)
 
 
 def reduce_foldedtensor(self: FoldedTensor):
