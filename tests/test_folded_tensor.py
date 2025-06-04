@@ -213,6 +213,23 @@ def test_refold_lines(ft):
     ).all()
 
 
+def test_refold_custom_pad_value(ft):
+    ft2 = ft.refold("lines", "words", pad_value=-1)
+    assert (
+        ft2.data
+        == torch.tensor(
+            [
+                [1, -1],
+                [-1, -1],
+                [-1, -1],
+                [-1, -1],
+                [2, 3],
+                [4, 3],
+            ]
+        )
+    ).all()
+
+
 def test_embedding(ft):
     embedder = torch.nn.Embedding(10, 16)
     embedding = embedder(ft.refold("words"))
@@ -294,6 +311,26 @@ def test_pad_embedding():
             [
                 [0, 1, 2],
                 [3, 4, 0],
+            ]
+        )
+    ).all()
+
+
+def test_custom_pad_value():
+    ft = as_folded_tensor(
+        [
+            [0, 1, 2],
+            [3, 4],
+        ],
+        pad_value=-1,
+        dtype=torch.long,
+    )
+    assert (
+        ft.data
+        == torch.tensor(
+            [
+                [0, 1, 2],
+                [3, 4, -1],
             ]
         )
     ).all()

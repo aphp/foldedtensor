@@ -200,7 +200,8 @@ std::tuple<
 nested_py_list_to_padded_np_array(
         const py::list &nested_list,
         std::vector<int> data_dims,
-        py::dtype &dtype) {
+        py::dtype &dtype,
+        py::object pad_value) {
     // Will contain the variable lengths of the nested lists
     // One sequence per dimension, containing the lengths of the lists at that dimension
     std::vector<std::vector<int64_t>> lengths;
@@ -236,7 +237,11 @@ nested_py_list_to_padded_np_array(
 
     // Create the padded array from the shape inferred during `flatten_py_list`
     py::array padded_array = py::array(py::dtype(dtype), shape);
-    padded_array[py::make_tuple(py::ellipsis())] = 0;
+    if (PyArray_FillWithScalar(
+            reinterpret_cast<PyArrayObject *>(padded_array.ptr()),
+            pad_value.ptr()) < 0) {
+        throw py::error_already_set();
+    }
 
     // Get the strides of the array
     const py::ssize_t *array_strides = padded_array.strides();
@@ -311,7 +316,15 @@ PYBIND11_MODULE(_C, m) {
     init_numpy();
 
     m.def("make_refolding_indexer", &make_refolding_indexer, "Build an indexer to refold data into a different shape");
-    m.def("nested_py_list_to_padded_array", &nested_py_list_to_padded_np_array, "Converts a nested Python list to a padded array");
+    m.def(
+        "nested_py_list_to_padded_array",
+        &nested_py_list_to_padded_np_array,
+        py::arg("nested_list"),
+        py::arg("data_dims"),
+        py::arg("dtype"),
+        py::arg("pad_value") = 0,
+        "Converts a nested Python list to a padded array"
+    );
 }
 
 #pragma clang diagnostic pop
