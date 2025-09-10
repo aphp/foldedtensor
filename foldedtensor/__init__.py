@@ -8,7 +8,183 @@ import numpy as np
 import torch
 from torch.autograd import Function
 
-from . import _C
+from . import _C  # type: ignore[import]
+
+Dim = Union[int, str]
+
+
+def map_indices(
+    indices: Tuple[Sequence[int], ...],
+    indice_dims: Tuple[int, ...],
+    lengths: Sequence[Sequence[int]],
+    data_dims: Tuple[int, ...],
+    *,
+    return_tensors: Optional[str] = None,
+):
+    """
+    Compute leaf (last-dim) flat indices given indices in other dimensions.
+
+    Parameters
+    ----------
+    indices: Tuple[Sequence[int], ...]
+        Tuple of index sequences (broadcasted together) describing positions
+        along `indice_dims`.
+    indice_dims: Tuple[int, ...]
+        Names or indices of the addressing dims.
+    lengths: Sequence[Sequence[int]]
+        Nested lengths describing the folded structure.
+    data_dims: Tuple[int, ...]
+        Names or indices describing the padded layout used for flattening.
+    return_tensors: Optional[str], optional (default=None)
+        Return type: "pt" for torch, "np" for numpy, "list" for python list.
+
+    Returns
+    -------
+    Union[List[int], np.ndarray, torch.Tensor]
+        Returns a list of flat indices compatible with `.view(-1)` of a tensor
+        refolded with `data_dims`.
+    """
+    D = len(lengths)
+    if data_dims[-1] != D - 1:
+        raise ValueError(
+            "data_dims must end with the last variable dimension (e.g., 'token')"
+        )
+
+    orig_shape = None
+    saw_pt = False
+    saw_np = False
+    np_indices: Tuple[np.ndarray, ...] = tuple(
+        (
+            (
+                lambda a: (
+                    (lambda arr: arr.reshape(-1))(
+                        a.detach().cpu().numpy()
+                        if isinstance(a, torch.Tensor)
+                        else (np.asarray(a))
+                    )
+                )
+            )(arr)
+        )
+        for arr in indices
+    )  # type: ignore[arg-type]
+
+    # Track types and original shape from the first array
+    first = indices[0]
+    if isinstance(first, torch.Tensor):
+        saw_pt = True
+        orig_shape = tuple(first.shape)
+    else:
+        arr0 = np.asarray(first)
+        if arr0.ndim > 1:
+            orig_shape = tuple(arr0.shape)
+        saw_np = isinstance(first, np.ndarray) or saw_np
+
+    if len(indice_dims) != len(np_indices):
+        raise ValueError("indices and indice_dims must have the same length")
+
+    res = _C.map_indices(
+        lengths,
+        list(data_dims),
+        list(indice_dims),
+        np_indices,
+    )
+    out_np = np.asarray(res)
+    # Reshape if needed
+    if orig_shape is not None:
+        out_np = out_np.reshape(orig_shape)
+
+    if return_tensors == "pt" or return_tensors is None and saw_pt:
+        return torch.from_numpy(out_np)
+    if return_tensors == "np" or return_tensors is None and saw_np:
+        return out_np
+    return out_np.tolist()
+
+
+def make_indices_ranges(
+    *,
+    begins,
+    ends,
+    indice_dims,
+    lengths,
+    data_dims,
+    return_tensors: Union[typing.Optional[str], bool] = None,
+):
+    """
+    Expand multiple ranges specified along indice_dims into:
+    - flat indices (compatible with `.view(-1)` of a tensor refolded with `data_dims`),
+    - start offsets per span,
+    - and span indices (the span id for each expanded position).
+
+    Parameters use the same conventions as map_indices. `begins` and `ends` are
+    tuples of 1D tensors or lists corresponding to each dimension in `indice_dims`.
+    Ranges are half-open: [begin, end), with boundary support when the last
+    coordinate equals the number of children of its parent.
+    """
+    if not isinstance(begins, (list, tuple)) or not isinstance(ends, (list, tuple)):
+        raise TypeError("begins and ends must be tuples/lists of arrays")
+    if len(begins) != len(indice_dims) or len(ends) != len(indice_dims):
+        raise ValueError("begins/ends must match indice_dims length")
+
+    saw_pt = False
+    saw_np = False
+    # Determine original shape from the first begins entry
+    first_b = begins[0]
+    if isinstance(first_b, torch.Tensor):
+        orig_shape = tuple(first_b.shape)
+        saw_pt = True
+    else:
+        arr0 = np.asarray(first_b)
+        orig_shape = tuple(arr0.shape) if arr0.ndim > 1 else None
+        saw_np = isinstance(first_b, np.ndarray) or saw_np
+
+    def _to_np1d(x):
+        nonlocal saw_pt, saw_np
+        if isinstance(x, torch.Tensor):
+            saw_pt = True
+            return x.detach().cpu().numpy().reshape(-1)
+        a = np.asarray(x)
+        if isinstance(x, np.ndarray):
+            saw_np = True
+        return a.reshape(-1)
+
+    begins_np = [_to_np1d(b) for b in begins]
+    ends_np = [_to_np1d(e) for e in ends]
+
+    res = _C.make_indices_ranges(
+        lengths,
+        list(data_dims),
+        list(indice_dims),
+        begins_np,
+        ends_np,
+    )
+
+    indices, offsets, span_indices = res
+    indices_np = np.asarray(indices)
+    offsets_np = np.asarray(offsets)
+    span_indices_np = np.asarray(span_indices)
+
+    # Reshape offsets to original input shape if multi-dimensional
+    if orig_shape is not None:
+        offsets_np = offsets_np.reshape(orig_shape)
+
+    if return_tensors == "pt" or return_tensors is None and saw_pt:
+        return (
+            torch.from_numpy(indices_np.astype(np.int64, copy=False)),
+            torch.from_numpy(offsets_np.astype(np.int64, copy=False)),
+            torch.from_numpy(span_indices_np.astype(np.int64, copy=False)),
+        )
+    if return_tensors == "np" or return_tensors is None and saw_np:
+        return (
+            indices_np,
+            offsets_np,
+            span_indices_np,
+        )
+    return (
+        indices_np.astype(np.int64, copy=False).tolist(),
+        offsets_np.astype(np.int64, copy=False).tolist(),
+        span_indices_np.astype(np.int64, copy=False).tolist(),
+    )
+
 
 np_to_torch_dtype = {
     torch.bool: bool,
@@ -49,13 +225,115 @@ except AttributeError:
 __version__ = "0.4.0"
 
 
-class FoldedTensorLengths(UserList):
+class FoldedTensorLayout(UserList):
+    """
+    Folded tensor layout information.
+    """
+
+    def __init__(
+        self,
+        initlist: Optional[Sequence[Sequence[int]]] = None,
+        *,
+        data_dims: Optional[Sequence[Union[int, str]]],
+        full_names: Optional[Sequence[str]],
+    ) -> None:
+        super().__init__(initlist or [])
+        self._full_names: Optional[Tuple[str, ...]] = (
+            tuple(full_names) if full_names is not None else None
+        )
+        if self._full_names is not None:
+            dd = tuple(
+                d if isinstance(d, int) else self._full_names.index(d)
+                for d in data_dims
+            )
+        else:
+            # Accept ints only when no names are provided
+            dd = tuple(int(d) for d in data_dims)
+        self._data_dims: Optional[Tuple[int, ...]] = dd
+
     def __hash__(self):
         return id(self)
 
+    @property
+    def full_names(self) -> Optional[Tuple[str, ...]]:
+        return self._full_names
 
-if typing.TYPE_CHECKING:
-    FoldedTensorLengths = List[List[int]]  # noqa: F811
+    @property
+    def data_dims(self) -> Optional[Tuple[int, ...]]:
+        return self._data_dims
+
+    def __getitem__(self, index: Union[int, str]) -> typing.Any:
+        if isinstance(index, str):
+            if self._full_names is None:
+                raise ValueError(
+                    "Cannot resolve named index without full_names in the layout"
+                )
+            try:
+                index = self._full_names.index(index)
+            except ValueError as exc:  # pragma: no cover
+                raise ValueError(f"Unknown dimension name {index!r}") from exc
+        if not isinstance(index, int):  # pragma: no cover
+            raise TypeError("Index must be an int or a str")
+        return super().__getitem__(index)
+
+    def resolve_dim(self, dim):
+        if isinstance(dim, tuple):
+            return tuple(self.resolve_dim(d) for d in dim)
+        if isinstance(dim, str):
+            if self._full_names is None:
+                raise ValueError(
+                    "Cannot resolve named dim without full_names in the layout"
+                )
+            try:
+                dim = self._full_names.index(dim)
+            except ValueError as exc:  # pragma: no cover
+                raise ValueError(f"Unknown dimension name {dim!r}") from exc
+        return int(dim)
+
+    def map_indices(
+        self,
+        indices: Tuple[Sequence[int], ...],
+        indice_dims: Tuple[Union[int, str], ...],
+        *,
+        data_dims: Optional[Sequence[Union[int, str]]] = None,
+        return_tensors: Optional[str] = None,
+    ):
+        indice_dims = self.resolve_dim(indice_dims)
+        data_dims = self.resolve_dim(data_dims or self.data_dims)
+
+        return map_indices(
+            indices=indices,
+            indice_dims=indice_dims,
+            lengths=self,
+            data_dims=data_dims,
+            return_tensors=return_tensors,
+        )
+
+    def make_indices_ranges(
+        self,
+        *,
+        begins,
+        ends,
+        indice_dims,
+        data_dims: Optional[Sequence[Union[int, str]]] = None,
+        return_tensors: Optional[str] = None,
+    ):
+        # Resolve indice_dims against this layout's names if provided
+        indice_dims = self.resolve_dim(indice_dims)
+        data_dims = self.resolve_dim(data_dims or self.data_dims)
+
+        return make_indices_ranges(
+            begins=begins,
+            ends=ends,
+            indice_dims=indice_dims,
+            lengths=self,
+            data_dims=data_dims,
+            return_tensors=return_tensors,
+        )
+
+
+# Backward-compatibility alias
+FoldedTensorLengths = FoldedTensorLayout
 
 
 # noinspection PyMethodOverriding
@@ -88,11 +366,12 @@ class Refold(Function):
         refolded_data.view(-1, *shape_suffix)[indexer] = data.view(
             -1, *shape_suffix
         ).index_select(0, self.indexer)
+        lengths = FoldedTensorLayout(
+            self.lengths, data_dims=dims, full_names=self.full_names
+        )
         return FoldedTensor(
             data=refolded_data,
-            lengths=self.lengths,
-            data_dims=dims,
-            full_names=self.full_names,
+            lengths=lengths,
             indexer=indexer,
         )
 
@@ -146,7 +425,7 @@ def as_folded_tensor(
     data_dims: Optional[Sequence[Union[int, str]]] = None,
     full_names: Optional[Sequence[str]] = None,
     dtype: Optional[torch.dtype] = None,
-    lengths: Optional[List[List[int]]] = None,
+    lengths: Optional[Union[FoldedTensorLayout, List[List[int]]]] = None,
     device: Optional[Union[str, torch.device]] = None,
 ):
     """
@@ -169,6 +448,9 @@ def as_folded_tensor(
     device: Optional[Unit[str, torch.device]]
         The device of the output tensor
     """
+    if isinstance(lengths, FoldedTensorLayout):
+        data_dims = lengths.data_dims or data_dims
+        full_names = lengths.full_names or full_names
     if full_names is not None:
         if data_dims is not None:
             data_dims = tuple(
@@ -189,11 +471,10 @@ def as_folded_tensor(
             f"Shape inferred from lengths is not compatible with data dims: {shape}, "
             f"{data.shape}, {len(data_dims)}"
         )
+        layout = FoldedTensorLayout(lengths, data_dims=data_dims, full_names=full_names)
         result = FoldedTensor(
             data=data,
-            lengths=FoldedTensorLengths(lengths),
-            data_dims=data_dims,
-            full_names=full_names,
+            lengths=layout,
             indexer=torch.from_numpy(np_indexer).to(data.device),
         )
     elif isinstance(data, Sequence):
@@ -217,11 +498,10 @@ def as_folded_tensor(
         padded = torch.from_numpy(padded)
         # In case of empty sequences, lengths are not computed correctly
         lengths = (list(lengths) + [[0]] * deepness)[:deepness]
+        layout = FoldedTensorLayout(lengths, data_dims=data_dims, full_names=full_names)
         result = FoldedTensor(
             data=padded,
-            lengths=FoldedTensorLengths(lengths),
-            data_dims=data_dims,
-            full_names=full_names,
+            lengths=layout,
             indexer=indexer,
         )
     else:
@@ -246,8 +526,6 @@ def _postprocess_func_result(result, input):
     return FoldedTensor(
         data=result,
         lengths=input.lengths,
-        data_dims=input.data_dims,
-        full_names=input.full_names,
         indexer=input.indexer,
         mask=input._mask,
     )
@@ -281,18 +559,12 @@ class FoldedTensor(torch.Tensor):
     def __new__(
         cls,
         data: torch.Tensor,
-        lengths: FoldedTensorLengths,
-        data_dims: Sequence[int],
-        full_names: Sequence[str],
+        lengths: FoldedTensorLayout,
         indexer: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
     ):
-        data_dims = data_dims
-        full_names = full_names
         instance = data.as_subclass(cls)
         instance.lengths = lengths
-        instance.data_dims = data_dims
-        instance.full_names = full_names
         instance.indexer = indexer
         instance._mask = mask
         return instance
@@ -301,11 +573,17 @@ class FoldedTensor(torch.Tensor):
         return FoldedTensor(
             data=data,
             lengths=self.lengths,
-            data_dims=self.data_dims,
-            full_names=self.full_names,
             indexer=self.indexer,
             mask=self._mask,
         )
+
+    @property
+    def data_dims(self) -> Tuple[int, ...]:
+        return self.lengths.data_dims
+
+    @property
+    def full_names(self) -> Optional[Tuple[str, ...]]:
+        return self.lengths.full_names
 
     @property
     def mask(self):
@@ -323,18 +601,14 @@ class FoldedTensor(torch.Tensor):
 
     def to(self, *args, **kwargs):
         with torch._C.DisableTorchFunction():
-            result = super().to(*args, **kwargs)
+            res = super().to(*args, **kwargs)
             copy = kwargs.get("copy", False)
-            non_blocking = kwargs.get("non_blocking", False)
+            nb = kwargs.get("non_blocking", False)
             return FoldedTensor(
-                data=result,
+                data=res,
                 lengths=self.lengths,
-                data_dims=self.data_dims,
-                full_names=self.full_names,
-                indexer=self.indexer.to(
-                    result.device, copy=copy, non_blocking=non_blocking
-                ),
-                mask=self._mask.to(result.device, copy=copy, non_blocking=non_blocking)
+                indexer=self.indexer.to(res.device, copy=copy, non_blocking=nb),
+                mask=self._mask.to(res.device, copy=copy, non_blocking=nb)
                 if self._mask is not None
                 else None,
             )
@@ -361,14 +635,14 @@ class FoldedTensor(torch.Tensor):
             if isinstance(arg, FoldedTensor):
                 assert (
                     ft is None or ft.data_dims == arg.data_dims
-                ), "Cannot perform operation on FoldedTensors with different structures"
+                ), "Cannot perform operation on FoldedTensors with different layouts"
                 ft = arg
             elif isinstance(arg, (list, tuple)):
                 for item in arg:
                     if isinstance(item, FoldedTensor):
                         assert ft is None or ft.data_dims == item.data_dims, (
                             "Cannot perform operation on FoldedTensors with "
-                            "different structures"
+                            "different layouts"
                         )
                         ft = item
 
@@ -408,10 +682,26 @@ class FoldedTensor(torch.Tensor):
                 dim if isinstance(dim, int) else self.full_names.index(dim)
                 for dim in dims
             )
-        except ValueError:
+        except ValueError:  # pragma: no cover
             raise ValueError(
                 f"Folded tensor with available dimensions {self.full_names} "
                 f"could not be refolded with dimensions {list(dims)}"
+            )
+
+        # Ensure the leaf (last variable) dimension is last in the refolded layout
+        leaf = len(self.lengths) - 1
+        if dims[-1] != leaf:
+            leaf_name = (
+                self.full_names[leaf] if self.full_names is not None else str(leaf)
+            )
+            dim_names = tuple(
+                self.full_names[d] if self.full_names is not None else str(d)
+                for d in dims
+            )
+            raise ValueError(
+                "The last dimension of data_dims must be the last variable "
+                f"dimension {leaf_name!r} (ie. {leaf}); got data_dims={dim_names} "
+                f"(ie. {tuple(dims)}"
             )
 
         if dims == self.data_dims:
@@ -431,8 +721,6 @@ def reduce_foldedtensor(self: FoldedTensor):
             (
                 self.data.as_tensor(),
                 self.lengths,
-                self.data_dims,
-                self.full_names,
                 self.indexer.clone()
                 if self.indexer.is_shared() and self.indexer.storage().is_cuda
                 else self.indexer,
