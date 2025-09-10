@@ -1,4 +1,5 @@
 # ruff: noqa: F401, E501
+import argparse
 import contextlib
 import random
 import subprocess
@@ -132,7 +133,16 @@ Environment:
 
 if __name__ == "__main__":
     # fmt: off
-    cases = [1, 2, 3, 4, 5, 6]
+    parser = argparse.ArgumentParser(description="Run foldedtensor benchmarks.")
+    parser.add_argument(
+        "-c",
+        "--cases",
+        type=int,
+        nargs="*",
+        help="Space-separated case IDs to run (1-8). Default: all.",
+    )
+    args = parser.parse_args()
+    cases = args.cases or list(range(1, 9))
     if 1 in cases:
         print("\n## Case 1 (pad variable lengths nested list)\n")
 
@@ -228,44 +238,50 @@ if __name__ == "__main__":
         print(f"Speedup against best alternative: **{min(alt) / ft_time:.2f}x** :rocket:")
 
     if 7 in cases:
-        # Test case not working yet
-
-        def sum_all_words_per_sample(ft):
-            lengths = ft.lengths
-            ids = torch.arange(lengths[0][0])
-            for i in range(1, len(lengths)):
-                ids = torch.repeat_interleave(
-                    ids,
-                    lengths[i],
-                    output_size=len(lengths[i + 1])
-                    if i < len(lengths) - 1
-                    else ft.size(len(ft.data_dims) - 1),
-                )
-
-            out = torch.zeros(lengths[0][0], ft.shape[-1])
-            out.index_add_(source=ft.as_tensor(), dim=0, index=ids)
-
-            return out
-
-
-        print("\n## Case 7 (flat sums)\n")
+        print("\n## Case 7 (summing vectors inside each differently-sized sequence, all concatenated)\n")
 
         with block_code():
             exec_and_print(
+                'def sum_all_words_per_sample(t):\n'
+                '    begins = torch.arange(len(t.lengths[1]))\n'
+                '    ends = begins + 1\n'
+                '    indices, offsets, spans = t.lengths.make_indices_ranges(\n'
+                '        begins=(begins,), ends=(ends,), indice_dims=(0,)\n'
+                '    )\n'
+                '    return torch.nn.functional.embedding_bag(\n'
+                '        input=indices,\n'
+                '        weight=t.view(-1, t.size(-1)),\n'
+                '        offsets=offsets,\n'
+                '        mode="sum",\n'
+                '    )\n\n'
                 "embedder = torch.nn.Embedding(500, 128)\n"
                 "nested_list = make_nested_list(320, (150, 250), value=1)\n"
-                "ft = foldedtensor.as_folded_tensor(nested_list).refold(2)\n"
-                "nt = torch.nested.nested_tensor([torch.LongTensor(sub) for sub in nested_list])\n"
+                "ft = foldedtensor.as_folded_tensor(nested_list).refold(1)\n"
+                #"nt = torch.nested.nested_tensor([torch.LongTensor(sub) for sub in nested_list])\n"
                 "ft = embedder(ft)\n"
-                "nt = embedder(nt)\n"
+                #"nt = embedder(nt)\n"
             )
-
-            nt_time = timeit("nt.sum(dim=1)")
+            pd_time = timeit("ft.refold(0, 1).sum(-2)")
             ft_time = timeit("sum_all_words_per_sample(ft)")
 
-        print(f"Speedup against best alternative: **{nt_time / ft_time:.2f}x** :rocket:")
+        print(f"Speedup against pad-then-sum: **{pd_time / ft_time:.2f}x** :rocket:")
 
-        # timeit("embedder(ft)")
-        # timeit("embedder(ft).refold(0, 1)")
-        # timeit("embedder(nt)")
+    if 8 in cases:
+        print("\n## Case 8 (CamemBERT tokenization with padding)\n")
+
+        with block_code():
+            exec_and_print(
+                "from transformers import AutoTokenizer\n"
+                "tokenizer = AutoTokenizer.from_pretrained('camembert-base')\n"
+                "texts = [\n"
+                "    ('Le chat est sur le tapis. ' * random.randint(50, 150)).strip()\n"
+                "    for _ in range(64)\n"
+                "]"
+            )
+            hf_time = timeit("tokenizer(texts, return_tensors='pt', padding=True)")
+            ft_time = timeit("foldedtensor.as_folded_tensor(tokenizer(texts)['input_ids'])")
+
+        print(
+            f"Speedup against baseline: **{hf_time / ft_time:.2f}x** :rocket:"
+        )
     # fmt: on

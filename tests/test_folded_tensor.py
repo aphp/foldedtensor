@@ -446,3 +446,48 @@ def test_missing_dims():
         tensor.refold("line", "token")
 
     assert "line" in str(e.value)
+
+
+def test_get_lengths():
+    tensor = as_folded_tensor(
+        [
+            [0, 1, 2],
+            [3, 4],
+        ],
+        full_names=("sample", "token"),
+        dtype=torch.long,
+    )
+    assert tensor.lengths == [[2], [3, 2]]
+    assert tensor.lengths["token"] == [3, 2]
+
+
+def test_recreate_folded_tensor_manually():
+    tensor = as_folded_tensor(
+        [
+            [0, 1, 2],
+            [3, 4],
+        ],
+        full_names=("sample", "token"),
+        dtype=torch.long,
+    )
+    as_folded_tensor(
+        data=tensor.data,
+        lengths=tensor.lengths,
+        data_dims=tensor.data_dims,
+        full_names=("sample_bis", "token_bis"),
+    )
+
+
+def test_fail_on_refold_missing_last_dim():
+    tensor = as_folded_tensor(
+        [
+            [[0], [1, 2]],
+            [[3, 4], [8, 9, 10, 11]],
+        ],
+        full_names=("sample", "sent", "word"),
+        dtype=torch.long,
+    )
+    with pytest.raises(ValueError) as e:
+        tensor.refold("sent")
+
+    assert "The last dimension" in str(e.value)
