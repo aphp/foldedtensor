@@ -78,6 +78,7 @@ jobs:
       coverage-report: coverage.txt
       coverage-badge: coverage.svg
       coverage-branch: coverage
+      python-version: "3.7"
 
   Installation:
     runs-on: ubuntu-22.04
