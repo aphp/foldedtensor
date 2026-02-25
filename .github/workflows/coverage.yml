@@ -24,10 +24,6 @@ on:
       coverage-data-pattern:
         required: true
         type: string
-      python-version:
-        required: false
-        type: string
-        default: "3.10"
 
 jobs:
   pull-request-coverage:
@@ -41,7 +37,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           # Use latest Python, so it understands all syntax.
-          python-version: ${{ inputs.python-version }}
+          python-version: "3.7"
 
       - uses: actions/download-artifact@v4
         with:
@@ -50,7 +46,7 @@ jobs:
 
       - name: Combine coverage
         run: |
-          python -Im pip install --upgrade "git+https://github.com/percevalw/coveragepy.git#egg=coverage[toml]"
+          python -Im pip install --upgrade "coverage[toml] @ git+https://github.com/percevalw/coveragepy.git"
           python -Im coverage combine
 
       - name: Compare coverage
@@ -124,7 +120,7 @@ jobs:
         with:
           # Use the earliest possible version of Python due to a bug in coveragepy.
           # See https://github.com/nedbat/coveragepy/issues/1572
-          python-version: ${{ inputs.python-version }}
+          python-version: "3.7"
 
       - uses: actions/download-artifact@v4
         with:
@@ -138,7 +134,7 @@ jobs:
 
       - name: Combine coverage and generate the report and the badge
         run: |
-          python -Im pip install --upgrade "git+https://github.com/percevalw/coveragepy.git#egg=coverage[toml]"
+          python -Im pip install --upgrade "coverage[toml] @ git+https://github.com/percevalw/coveragepy.git"
           python -Im coverage combine
           coverage report --show-missing > /tmp/coverage.txt
 
