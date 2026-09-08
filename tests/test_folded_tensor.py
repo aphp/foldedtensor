@@ -1,7 +1,14 @@
+import pickle
+
 import pytest
 import torch
 
-from foldedtensor import FoldedTensor, as_folded_tensor
+from foldedtensor import (
+    FoldedTensor,
+    FoldedTensorLengths,
+    as_folded_tensor,
+    reduce_foldedtensor,
+)
 
 
 def test_as_folded_tensor_from_nested_list():
@@ -349,7 +356,7 @@ def test_no_data_dims():
 
 def test_as_tensor(ft):
     tensor = ft.as_tensor()
-    assert type(tensor) == torch.Tensor
+    assert type(tensor) is torch.Tensor
     assert tensor.shape == (2, 5, 2)
     assert tensor.storage().data_ptr() == ft.storage().data_ptr()
 
@@ -448,46 +455,61 @@ def test_missing_dims():
     assert "line" in str(e.value)
 
 
-def test_get_lengths():
-    tensor = as_folded_tensor(
-        [
-            [0, 1, 2],
-            [3, 4],
-        ],
-        full_names=("sample", "token"),
-        dtype=torch.long,
-    )
+def test_layout_metadata():
+    tensor = as_folded_tensor([[0, 1, 2], [3, 4]], full_names=("sample", "token"))
     assert tensor.lengths == [[2], [3, 2]]
     assert tensor.lengths["token"] == [3, 2]
-
-
-def test_recreate_folded_tensor_manually():
-    tensor = as_folded_tensor(
-        [
-            [0, 1, 2],
-            [3, 4],
-        ],
-        full_names=("sample", "token"),
-        dtype=torch.long,
-    )
-    as_folded_tensor(
-        data=tensor.data,
+    recreated = as_folded_tensor(tensor.as_tensor(), lengths=tensor.lengths)
+    renamed = as_folded_tensor(
+        tensor.as_tensor(),
         lengths=tensor.lengths,
-        data_dims=tensor.data_dims,
         full_names=("sample_bis", "token_bis"),
     )
+    assert recreated.full_names == tensor.full_names
+    assert renamed.full_names == ("sample_bis", "token_bis")
+    assert renamed.tolist() == tensor.tolist()
+    with pytest.raises(ValueError, match="The last dimension"):
+        tensor.refold("sample")
 
 
-def test_fail_on_refold_missing_last_dim():
-    tensor = as_folded_tensor(
-        [
-            [[0], [1, 2]],
-            [[3, 4], [8, 9, 10, 11]],
-        ],
-        full_names=("sample", "sent", "word"),
-        dtype=torch.long,
+@pytest.mark.parametrize("positional", [False, True])
+def test_constructor_dimensions(positional):
+    source = as_folded_tensor([[1.0, 2.0], [3.0]], full_names=("sample", "word"))
+    args = dict(
+        data=source.as_tensor(),
+        lengths=list(source.lengths),
+        data_dims=(0, 1),
+        full_names=("sample", "word"),
+        indexer=source.indexer,
+        mask=source.mask,
     )
-    with pytest.raises(ValueError) as e:
-        tensor.refold("sent")
+    tensor = FoldedTensor(*args.values()) if positional else FoldedTensor(**args)
+    constructor, state = reduce_foldedtensor(tensor)
+    for restored in (tensor, constructor(*state)):
+        assert restored.refold("word").tolist() == [1.0, 2.0, 3.0]
+        assert restored.lengths.full_names == ("sample", "word")
+        assert restored.mask.tolist() == [[True, True], [True, False]]
 
-    assert "The last dimension" in str(e.value)
+
+def test_pickle_tensor_attributes():
+    # Tensor attributes supply dimensions when serialized lengths contain only counts
+    source = as_folded_tensor([[1.0, 2.0], [3.0]], full_names=("sample", "word"))
+    lengths = FoldedTensorLengths.__new__(FoldedTensorLengths)
+    lengths.__dict__["data"] = list(source.lengths)
+    tensor = source.as_tensor().as_subclass(FoldedTensor)
+    tensor.__dict__.update(
+        lengths=lengths,
+        data_dims=(0, 1),
+        full_names=("sample", "word"),
+        indexer=source.indexer,
+        _mask=source.mask,
+    )
+    for original in (source, tensor):
+        restored = pickle.loads(pickle.dumps(original))
+        assert restored.refold("word").tolist() == [1.0, 2.0, 3.0]
+        assert restored.lengths.full_names == ("sample", "word")
+        assert restored.mask.tolist() == [[True, True], [True, False]]
+    renamed = source.with_data(source.as_tensor())
+    renamed.full_names = ("doc", "token")
+    assert renamed.lengths.full_names == ("doc", "token")
+    assert source.full_names == ("sample", "word")

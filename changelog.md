@@ -2,10 +2,10 @@
 
 ## Unreleased
 
-- Add `map_indices` and `make_indices_ranges` with C++ backends and expose `lengths.map_indices` and `lengths.make_indices_ranges` with boundary handling and flat indices with offsets and span ids for pooling with `embedding_bag`.
-- Introduce `FoldedTensorLayout` to store `full_names` and `data_dims` with named dimension resolution and helper methods and use it as the `lengths` container for `FoldedTensor`
-- Improve `as_folded_tensor` to better infer dims and dtype from nested data and to accept named `data_dims` and better handle names and empty structures
-- Benchmark script adds `--cases` to run selected cases and a new case for range based pooling and adjusts outputs
+- Add range expansion that returns storage indices without padding
+- Preserve empty contexts and words when refolding padded layouts
+- Store dimension names and tensor axes in `FoldedTensorLayout` for span pooling before the forward pass
+- Keep explicit names and dimensions when recreating a tensor from a layout
 
 ## v0.4.0
 
