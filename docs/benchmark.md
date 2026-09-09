@@ -9,7 +9,7 @@ and working with nested lists and tensors.
 
 Environment:
 - `torch.__version__ == '2.6.0'`
-- `foldedtensor.__version__ == '0.4.0'`
+- `foldedtensor.__version__ == '0.5.0.dev1'`
 - `python == 3.9.20`
 - `sys.platform == 'darwin'`
 

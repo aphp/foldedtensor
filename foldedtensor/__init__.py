@@ -137,7 +137,7 @@ try:
 except AttributeError:
     DisableTorchFunctionSubclass = torch._C.DisableTorchFunction
 
-__version__ = "0.4.0"
+__version__ = "0.5.0.dev1"
 
 
 class FoldedTensorLayout(UserList):
