@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.5.0.dev0 (2026-09-09)
 
 - Add range expansion that returns storage indices without padding
 - Preserve empty contexts and words when refolding padded layouts
