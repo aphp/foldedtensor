@@ -29,6 +29,7 @@ jobs:
         uses: pypa/cibuildwheel@v2.23.1
         env:
           CIBW_ARCHS_MACOS: ${{ matrix.arch }}
+          CIBW_ENVIRONMENT_LINUX: "PIP_ONLY_BINARY=numpy"
 
       - name: List wheels
         run: ls -l ./wheelhouse
